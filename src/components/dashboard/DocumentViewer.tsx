@@ -1,4 +1,3 @@
-
 import React, { useState, useEffect } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
@@ -106,13 +105,11 @@ export const DocumentViewer = () => {
   // Save signature fields mutation
   const saveFieldsMutation = useMutation({
     mutationFn: async (fields: SignatureField[]) => {
-      // Delete existing fields
       await supabase
         .from('signature_fields')
         .delete()
         .eq('document_id', id);
 
-      // Insert new fields
       if (fields.length > 0) {
         const { error } = await supabase
           .from('signature_fields')
@@ -255,7 +252,7 @@ export const DocumentViewer = () => {
       </div>
 
       <div className="grid lg:grid-cols-4 gap-6">
-        {/* Enhanced Signature Fields Panel */}
+        {/* Signature Fields Panel */}
         <div className="lg:col-span-1">
           <Card>
             <CardHeader>
@@ -388,33 +385,37 @@ export const DocumentViewer = () => {
                     <div className="text-center">
                       <p className="text-red-600 font-medium">PDF Loading Error</p>
                       <p className="text-gray-600 text-sm mt-1">{pdfError}</p>
-                      <p className="text-gray-500 text-xs mt-2">The storage bucket may need to be configured properly.</p>
                     </div>
                   </div>
                 ) : pdfUrl ? (
-                  <div className="relative">
-                    <embed
-                      src={pdfUrl}
-                      type="application/pdf"
-                      width="100%"
-                      height="600px"
-                      className="border-0"
+                  <div className="relative w-full h-full">
+                    <iframe
+                      src={`${pdfUrl}#toolbar=0&navpanes=0&scrollbar=0`}
+                      className="w-full h-[600px] border-0"
+                      title="PDF Viewer"
                       onError={() => setPdfError('Failed to load PDF file')}
                     />
-                    {/* Fallback message for browsers that don't support embed */}
-                    <div className="absolute inset-0 flex items-center justify-center bg-gray-50 opacity-0 hover:opacity-100 transition-opacity pointer-events-none">
-                      <p className="text-gray-600 text-sm">
-                        If PDF doesn't display, <a href={pdfUrl} target="_blank" rel="noopener noreferrer" className="text-blue-600 underline pointer-events-auto">click here to view</a>
-                      </p>
+                    <div className="absolute top-2 right-2 z-10">
+                      <a
+                        href={pdfUrl}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="bg-blue-600 text-white px-3 py-1 rounded text-sm hover:bg-blue-700"
+                      >
+                        Open in new tab
+                      </a>
                     </div>
                   </div>
                 ) : (
                   <div className="flex items-center justify-center h-[600px]">
-                    <p className="text-gray-600">Loading PDF...</p>
+                    <div className="text-center">
+                      <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600 mx-auto mb-4"></div>
+                      <p className="text-gray-600">Loading PDF...</p>
+                    </div>
                   </div>
                 )}
                 
-                {/* Enhanced Signature Field Overlays */}
+                {/* Signature Field Overlays */}
                 {signatureFields.map((field, index) => {
                   const fieldInfo = getFieldDisplayInfo(field.field_type);
                   const FieldIcon = fieldInfo.icon;
