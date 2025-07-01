@@ -1,4 +1,3 @@
-
 import React, { useState, useEffect } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
@@ -7,8 +6,9 @@ import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Badge } from '@/components/ui/badge';
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { useToast } from '@/hooks/use-toast';
-import { ArrowLeft, Share2, PenTool, Save, Users } from 'lucide-react';
+import { ArrowLeft, Share2, PenTool, Save, Users, Type, Calendar, FileText, User, Building } from 'lucide-react';
 
 interface SignatureField {
   id?: string;
@@ -18,7 +18,18 @@ interface SignatureField {
   height: number;
   signer_email: string;
   page_number: number;
+  field_type: 'signature' | 'date' | 'text' | 'name' | 'initials' | 'company';
+  is_required: boolean;
 }
+
+const fieldTypes = [
+  { value: 'signature', label: 'Signature', icon: PenTool, color: 'bg-blue-500' },
+  { value: 'initials', label: 'Initials', icon: Type, color: 'bg-green-500' },
+  { value: 'name', label: 'Full Name', icon: User, color: 'bg-purple-500' },
+  { value: 'date', label: 'Date', icon: Calendar, color: 'bg-orange-500' },
+  { value: 'text', label: 'Text Field', icon: FileText, color: 'bg-gray-500' },
+  { value: 'company', label: 'Company', icon: Building, color: 'bg-indigo-500' },
+];
 
 export const DocumentViewer = () => {
   const { id } = useParams<{ id: string }>();
@@ -28,6 +39,7 @@ export const DocumentViewer = () => {
   
   const [signatureFields, setSignatureFields] = useState<SignatureField[]>([]);
   const [newSignerEmail, setNewSignerEmail] = useState('');
+  const [selectedFieldType, setSelectedFieldType] = useState<string>('signature');
   const [isAddingField, setIsAddingField] = useState(false);
   const [pdfUrl, setPdfUrl] = useState<string>('');
 
@@ -74,7 +86,10 @@ export const DocumentViewer = () => {
   // Load existing signature fields
   useEffect(() => {
     if (existingFields) {
-      setSignatureFields(existingFields);
+      setSignatureFields(existingFields.map(field => ({
+        ...field,
+        field_type: field.field_type as SignatureField['field_type']
+      })));
     }
   }, [existingFields]);
 
@@ -100,6 +115,8 @@ export const DocumentViewer = () => {
               width: field.width,
               height: field.height,
               page_number: field.page_number,
+              field_type: field.field_type,
+              is_required: field.is_required,
             }))
           );
         if (error) throw error;
@@ -107,7 +124,7 @@ export const DocumentViewer = () => {
     },
     onSuccess: () => {
       toast({
-        title: 'Signature Fields Saved',
+        title: 'Fields Saved',
         description: 'The signature fields have been saved successfully.',
       });
       queryClient.invalidateQueries({ queryKey: ['signature-fields', id] });
@@ -128,13 +145,20 @@ export const DocumentViewer = () => {
     const x = ((event.clientX - rect.left) / rect.width) * 100;
     const y = ((event.clientY - rect.top) / rect.height) * 100;
 
+    const fieldType = fieldTypes.find(f => f.value === selectedFieldType);
+    const fieldWidth = selectedFieldType === 'signature' ? 150 : 
+                      selectedFieldType === 'initials' ? 80 : 120;
+    const fieldHeight = selectedFieldType === 'signature' ? 50 : 30;
+
     const newField: SignatureField = {
       x_position: x,
       y_position: y,
-      width: 150,
-      height: 50,
+      width: fieldWidth,
+      height: fieldHeight,
       signer_email: newSignerEmail.trim(),
       page_number: 1,
+      field_type: selectedFieldType as SignatureField['field_type'],
+      is_required: true,
     };
 
     setSignatureFields([...signatureFields, newField]);
@@ -147,6 +171,10 @@ export const DocumentViewer = () => {
 
   const saveFields = () => {
     saveFieldsMutation.mutate(signatureFields);
+  };
+
+  const getFieldDisplayInfo = (fieldType: string) => {
+    return fieldTypes.find(f => f.value === fieldType) || fieldTypes[0];
   };
 
   if (isLoading) {
@@ -217,13 +245,13 @@ export const DocumentViewer = () => {
       </div>
 
       <div className="grid lg:grid-cols-4 gap-6">
-        {/* Signature Fields Panel */}
+        {/* Enhanced Signature Fields Panel */}
         <div className="lg:col-span-1">
           <Card>
             <CardHeader>
               <CardTitle className="flex items-center gap-2">
                 <PenTool className="h-5 w-5" />
-                Signature Fields
+                Signature Tools
               </CardTitle>
             </CardHeader>
             <CardContent className="space-y-4">
@@ -236,6 +264,25 @@ export const DocumentViewer = () => {
                   onChange={(e) => setNewSignerEmail(e.target.value)}
                 />
               </div>
+
+              <div className="space-y-2">
+                <label className="text-sm font-medium">Field Type</label>
+                <Select value={selectedFieldType} onValueChange={setSelectedFieldType}>
+                  <SelectTrigger>
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {fieldTypes.map((type) => (
+                      <SelectItem key={type.value} value={type.value}>
+                        <div className="flex items-center gap-2">
+                          <type.icon className="h-4 w-4" />
+                          {type.label}
+                        </div>
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
               
               <Button
                 onClick={() => {
@@ -243,7 +290,7 @@ export const DocumentViewer = () => {
                     setIsAddingField(true);
                     toast({
                       title: 'Click on PDF',
-                      description: 'Click where you want to place the signature field.',
+                      description: `Click where you want to place the ${getFieldDisplayInfo(selectedFieldType).label.toLowerCase()}.`,
                     });
                   } else {
                     toast({
@@ -256,8 +303,24 @@ export const DocumentViewer = () => {
                 className="w-full"
                 disabled={isAddingField}
               >
-                {isAddingField ? 'Click on PDF...' : 'Add Signature Field'}
+                {isAddingField ? 'Click on PDF...' : `Add ${getFieldDisplayInfo(selectedFieldType).label}`}
               </Button>
+
+              {/* Field Type Legend */}
+              <div className="space-y-2">
+                <h4 className="text-sm font-medium">Field Types</h4>
+                <div className="grid grid-cols-2 gap-2">
+                  {fieldTypes.map((type) => (
+                    <div
+                      key={type.value}
+                      className="flex items-center gap-2 p-2 rounded-lg bg-gray-50 text-xs"
+                    >
+                      <div className={`w-3 h-3 rounded ${type.color}`}></div>
+                      <span>{type.label}</span>
+                    </div>
+                  ))}
+                </div>
+              </div>
 
               {signatureFields.length > 0 && (
                 <div className="space-y-2">
@@ -265,26 +328,36 @@ export const DocumentViewer = () => {
                     <Users className="h-4 w-4" />
                     Current Fields ({signatureFields.length})
                   </h4>
-                  {signatureFields.map((field, index) => (
-                    <div key={index} className="bg-gray-50 p-3 rounded-lg">
-                      <div className="flex items-center justify-between">
-                        <div>
-                          <p className="text-sm font-medium">{field.signer_email}</p>
-                          <p className="text-xs text-gray-600">
-                            Position: {Math.round(field.x_position)}%, {Math.round(field.y_position)}%
-                          </p>
+                  <div className="max-h-60 overflow-y-auto space-y-2">
+                    {signatureFields.map((field, index) => {
+                      const fieldInfo = getFieldDisplayInfo(field.field_type);
+                      const FieldIcon = fieldInfo.icon;
+                      return (
+                        <div key={index} className="bg-gray-50 p-3 rounded-lg">
+                          <div className="flex items-center justify-between">
+                            <div className="flex-1">
+                              <div className="flex items-center gap-2 mb-1">
+                                <FieldIcon className="h-3 w-3" />
+                                <span className="text-xs font-medium">{fieldInfo.label}</span>
+                              </div>
+                              <p className="text-xs text-gray-600 truncate">{field.signer_email}</p>
+                              <p className="text-xs text-gray-500">
+                                {Math.round(field.x_position)}%, {Math.round(field.y_position)}%
+                              </p>
+                            </div>
+                            <Button
+                              variant="ghost"
+                              size="sm"
+                              onClick={() => removeField(index)}
+                              className="text-red-600 hover:text-red-700 h-6 w-6 p-0"
+                            >
+                              ×
+                            </Button>
+                          </div>
                         </div>
-                        <Button
-                          variant="ghost"
-                          size="sm"
-                          onClick={() => removeField(index)}
-                          className="text-red-600 hover:text-red-700"
-                        >
-                          ×
-                        </Button>
-                      </div>
-                    </div>
-                  ))}
+                      );
+                    })}
+                  </div>
                 </div>
               )}
             </CardContent>
@@ -311,21 +384,36 @@ export const DocumentViewer = () => {
                   </div>
                 )}
                 
-                {/* Signature Field Overlays */}
-                {signatureFields.map((field, index) => (
-                  <div
-                    key={index}
-                    className="absolute border-2 border-blue-500 bg-blue-100 bg-opacity-50 flex items-center justify-center text-xs font-medium text-blue-700"
-                    style={{
-                      left: `${field.x_position}%`,
-                      top: `${field.y_position}%`,
-                      width: `${(field.width / 800) * 100}%`,
-                      height: `${(field.height / 600) * 100}%`,
-                    }}
-                  >
-                    {field.signer_email}
-                  </div>
-                ))}
+                {/* Enhanced Signature Field Overlays */}
+                {signatureFields.map((field, index) => {
+                  const fieldInfo = getFieldDisplayInfo(field.field_type);
+                  const FieldIcon = fieldInfo.icon;
+                  return (
+                    <div
+                      key={index}
+                      className={`absolute border-2 ${fieldInfo.color.replace('bg-', 'border-')} bg-opacity-20 ${fieldInfo.color} flex items-center justify-center text-xs font-medium text-white shadow-sm`}
+                      style={{
+                        left: `${field.x_position}%`,
+                        top: `${field.y_position}%`,
+                        width: `${(field.width / 800) * 100}%`,
+                        height: `${(field.height / 600) * 100}%`,
+                        minWidth: '60px',
+                        minHeight: '25px',
+                      }}
+                    >
+                      <div className="flex items-center gap-1">
+                        <FieldIcon className="h-3 w-3" />
+                        <span className="truncate text-xs">
+                          {field.field_type === 'signature' ? 'Sign' :
+                           field.field_type === 'initials' ? 'Init' :
+                           field.field_type === 'name' ? 'Name' :
+                           field.field_type === 'date' ? 'Date' :
+                           field.field_type === 'company' ? 'Co.' : 'Text'}
+                        </span>
+                      </div>
+                    </div>
+                  );
+                })}
               </div>
             </CardContent>
           </Card>

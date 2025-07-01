@@ -5,14 +5,16 @@ import { supabase } from '@/integrations/supabase/client';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
+import { Progress } from '@/components/ui/progress';
 import { useToast } from '@/hooks/use-toast';
-import { Upload, FileText, X } from 'lucide-react';
+import { Upload, FileText, X, CheckCircle } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 
 export const UploadPage = () => {
   const [title, setTitle] = useState('');
   const [file, setFile] = useState<File | null>(null);
   const [isUploading, setIsUploading] = useState(false);
+  const [uploadProgress, setUploadProgress] = useState(0);
   const [dragActive, setDragActive] = useState(false);
   
   const { user } = useAuth();
@@ -69,12 +71,27 @@ export const UploadPage = () => {
     }
   };
 
+  const simulateProgress = () => {
+    setUploadProgress(0);
+    const interval = setInterval(() => {
+      setUploadProgress(prev => {
+        if (prev >= 90) {
+          clearInterval(interval);
+          return 90; // Keep at 90% until actual upload completes
+        }
+        return prev + Math.random() * 15;
+      });
+    }, 200);
+    return interval;
+  };
+
   const handleUpload = async (e: React.FormEvent) => {
     e.preventDefault();
     
     if (!file || !user || !title.trim()) return;
     
     setIsUploading(true);
+    const progressInterval = simulateProgress();
     
     try {
       // Upload file to Supabase Storage
@@ -86,6 +103,9 @@ export const UploadPage = () => {
         .upload(filePath, file);
       
       if (uploadError) throw uploadError;
+      
+      // Complete progress bar
+      setUploadProgress(100);
       
       // Save document metadata to database
       const { data, error: dbError } = await supabase
@@ -108,7 +128,11 @@ export const UploadPage = () => {
         description: 'Your document has been uploaded successfully.',
       });
       
-      navigate(`/dashboard/document/${data.id}`);
+      // Small delay to show completion
+      setTimeout(() => {
+        navigate(`/dashboard/document/${data.id}`);
+      }, 500);
+      
     } catch (error) {
       console.error('Upload error:', error);
       toast({
@@ -116,8 +140,13 @@ export const UploadPage = () => {
         description: 'Failed to upload document. Please try again.',
         variant: 'destructive',
       });
+      setUploadProgress(0);
     } finally {
-      setIsUploading(false);
+      clearInterval(progressInterval);
+      setTimeout(() => {
+        setIsUploading(false);
+        setUploadProgress(0);
+      }, 1000);
     }
   };
 
@@ -142,6 +171,7 @@ export const UploadPage = () => {
                 value={title}
                 onChange={(e) => setTitle(e.target.value)}
                 required
+                disabled={isUploading}
               />
             </div>
 
@@ -162,21 +192,27 @@ export const UploadPage = () => {
               >
                 {file ? (
                   <div className="space-y-3">
-                    <FileText className="h-12 w-12 text-green-600 mx-auto" />
+                    {uploadProgress === 100 ? (
+                      <CheckCircle className="h-12 w-12 text-green-600 mx-auto" />
+                    ) : (
+                      <FileText className="h-12 w-12 text-green-600 mx-auto" />
+                    )}
                     <div>
                       <p className="font-medium text-gray-900">{file.name}</p>
                       <p className="text-sm text-gray-600">{(file.size / 1024).toFixed(1)} KB</p>
                     </div>
-                    <Button
-                      type="button"
-                      variant="ghost"
-                      size="sm"
-                      onClick={() => setFile(null)}
-                      className="text-red-600 hover:text-red-700"
-                    >
-                      <X className="h-4 w-4 mr-1" />
-                      Remove
-                    </Button>
+                    {!isUploading && (
+                      <Button
+                        type="button"
+                        variant="ghost"
+                        size="sm"
+                        onClick={() => setFile(null)}
+                        className="text-red-600 hover:text-red-700"
+                      >
+                        <X className="h-4 w-4 mr-1" />
+                        Remove
+                      </Button>
+                    )}
                   </div>
                 ) : (
                   <div className="space-y-3">
@@ -191,15 +227,27 @@ export const UploadPage = () => {
                       onChange={handleFileChange}
                       className="hidden"
                       id="file-upload"
+                      disabled={isUploading}
                     />
                     <label htmlFor="file-upload">
-                      <Button type="button" variant="outline" asChild>
+                      <Button type="button" variant="outline" asChild disabled={isUploading}>
                         <span>Choose File</span>
                       </Button>
                     </label>
                   </div>
                 )}
               </div>
+
+              {/* Progress Bar */}
+              {isUploading && (
+                <div className="space-y-2">
+                  <div className="flex justify-between text-sm">
+                    <span className="text-gray-600">Uploading...</span>
+                    <span className="text-gray-600">{Math.round(uploadProgress)}%</span>
+                  </div>
+                  <Progress value={uploadProgress} className="w-full" />
+                </div>
+              )}
             </div>
 
             <div className="flex gap-3">
@@ -207,6 +255,7 @@ export const UploadPage = () => {
                 type="button"
                 variant="outline"
                 onClick={() => navigate('/dashboard')}
+                disabled={isUploading}
               >
                 Cancel
               </Button>
