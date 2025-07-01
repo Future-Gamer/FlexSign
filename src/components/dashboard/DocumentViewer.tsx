@@ -1,3 +1,4 @@
+
 import React, { useState, useEffect } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
@@ -8,7 +9,7 @@ import { Input } from '@/components/ui/input';
 import { Badge } from '@/components/ui/badge';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { useToast } from '@/hooks/use-toast';
-import { ArrowLeft, Share2, PenTool, Save, Users, Type, Calendar, FileText, User, Building } from 'lucide-react';
+import { ArrowLeft, Share2, PenTool, Save, Users, Type, Calendar, FileText, User, Building, AlertCircle } from 'lucide-react';
 
 interface SignatureField {
   id?: string;
@@ -42,6 +43,7 @@ export const DocumentViewer = () => {
   const [selectedFieldType, setSelectedFieldType] = useState<string>('signature');
   const [isAddingField, setIsAddingField] = useState(false);
   const [pdfUrl, setPdfUrl] = useState<string>('');
+  const [pdfError, setPdfError] = useState<string>('');
 
   // Fetch document details
   const { data: document, isLoading } = useQuery({
@@ -73,13 +75,21 @@ export const DocumentViewer = () => {
     enabled: !!id,
   });
 
-  // Get PDF URL
+  // Get PDF URL with better error handling
   useEffect(() => {
     if (document?.file_path) {
-      const { data } = supabase.storage
-        .from('documents')
-        .getPublicUrl(document.file_path);
-      setPdfUrl(data.publicUrl);
+      try {
+        const { data } = supabase.storage
+          .from('documents')
+          .getPublicUrl(document.file_path);
+        
+        console.log('PDF URL:', data.publicUrl);
+        setPdfUrl(data.publicUrl);
+        setPdfError('');
+      } catch (error) {
+        console.error('Error getting PDF URL:', error);
+        setPdfError('Failed to load PDF file');
+      }
     }
   }, [document]);
 
@@ -372,12 +382,32 @@ export const DocumentViewer = () => {
                 className="relative bg-gray-100 min-h-[600px] cursor-crosshair"
                 onClick={handlePdfClick}
               >
-                {pdfUrl ? (
-                  <iframe
-                    src={pdfUrl}
-                    className="w-full h-[600px] border-0"
-                    title="PDF Viewer"
-                  />
+                {pdfError ? (
+                  <div className="flex flex-col items-center justify-center h-[600px] space-y-4">
+                    <AlertCircle className="h-12 w-12 text-red-500" />
+                    <div className="text-center">
+                      <p className="text-red-600 font-medium">PDF Loading Error</p>
+                      <p className="text-gray-600 text-sm mt-1">{pdfError}</p>
+                      <p className="text-gray-500 text-xs mt-2">The storage bucket may need to be configured properly.</p>
+                    </div>
+                  </div>
+                ) : pdfUrl ? (
+                  <div className="relative">
+                    <embed
+                      src={pdfUrl}
+                      type="application/pdf"
+                      width="100%"
+                      height="600px"
+                      className="border-0"
+                      onError={() => setPdfError('Failed to load PDF file')}
+                    />
+                    {/* Fallback message for browsers that don't support embed */}
+                    <div className="absolute inset-0 flex items-center justify-center bg-gray-50 opacity-0 hover:opacity-100 transition-opacity pointer-events-none">
+                      <p className="text-gray-600 text-sm">
+                        If PDF doesn't display, <a href={pdfUrl} target="_blank" rel="noopener noreferrer" className="text-blue-600 underline pointer-events-auto">click here to view</a>
+                      </p>
+                    </div>
+                  </div>
                 ) : (
                   <div className="flex items-center justify-center h-[600px]">
                     <p className="text-gray-600">Loading PDF...</p>

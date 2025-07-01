@@ -2,7 +2,7 @@
 import React from 'react';
 import { useAuth } from '@/components/auth/AuthProvider';
 import { Button } from '@/components/ui/button';
-import { FileText, LogOut, User, Upload, FolderOpen } from 'lucide-react';
+import { FileText, LogOut, User, Upload, FolderOpen, PenTool, Type, Calendar, Building } from 'lucide-react';
 import { useNavigate, useLocation } from 'react-router-dom';
 
 interface DashboardLayoutProps {
@@ -22,6 +22,15 @@ export const DashboardLayout: React.FC<DashboardLayoutProps> = ({ children }) =>
   const navItems = [
     { path: '/dashboard', icon: FolderOpen, label: 'Documents' },
     { path: '/dashboard/upload', icon: Upload, label: 'Upload' },
+  ];
+
+  const pdfTools = [
+    { icon: PenTool, label: 'Signature', color: 'text-blue-600' },
+    { icon: Type, label: 'Initials', color: 'text-green-600' },
+    { icon: User, label: 'Full Name', color: 'text-purple-600' },
+    { icon: Calendar, label: 'Date', color: 'text-orange-600' },
+    { icon: FileText, label: 'Text Field', color: 'text-gray-600' },
+    { icon: Building, label: 'Company', color: 'text-indigo-600' },
   ];
 
   return (
@@ -59,21 +68,42 @@ export const DashboardLayout: React.FC<DashboardLayoutProps> = ({ children }) =>
       <div className="flex">
         {/* Sidebar */}
         <aside className="w-64 bg-white border-r border-gray-200 min-h-[calc(100vh-73px)]">
-          <nav className="p-4 space-y-2">
-            {navItems.map((item) => (
-              <button
-                key={item.path}
-                onClick={() => navigate(item.path)}
-                className={`w-full flex items-center gap-3 px-3 py-2 rounded-lg text-left transition-colors ${
-                  location.pathname === item.path
-                    ? 'bg-blue-50 text-blue-700 border border-blue-200'
-                    : 'text-gray-700 hover:bg-gray-50'
-                }`}
-              >
-                <item.icon className="h-5 w-5" />
-                {item.label}
-              </button>
-            ))}
+          <nav className="p-4 space-y-6">
+            {/* Main Navigation */}
+            <div className="space-y-2">
+              {navItems.map((item) => (
+                <button
+                  key={item.path}
+                  onClick={() => navigate(item.path)}
+                  className={`w-full flex items-center gap-3 px-3 py-2 rounded-lg text-left transition-colors ${
+                    location.pathname === item.path
+                      ? 'bg-blue-50 text-blue-700 border border-blue-200'
+                      : 'text-gray-700 hover:bg-gray-50'
+                  }`}
+                >
+                  <item.icon className="h-5 w-5" />
+                  {item.label}
+                </button>
+              ))}
+            </div>
+
+            {/* PDF Tools Section */}
+            <div className="border-t border-gray-200 pt-4">
+              <h3 className="text-xs font-semibold text-gray-500 uppercase tracking-wider mb-3">
+                PDF Tools
+              </h3>
+              <div className="grid grid-cols-2 gap-2">
+                {pdfTools.map((tool, index) => (
+                  <div
+                    key={index}
+                    className="flex flex-col items-center p-3 rounded-lg bg-gray-50 hover:bg-gray-100 transition-colors cursor-pointer group"
+                  >
+                    <tool.icon className={`h-5 w-5 ${tool.color} group-hover:scale-110 transition-transform`} />
+                    <span className="text-xs text-gray-700 mt-1 text-center">{tool.label}</span>
+                  </div>
+                ))}
+              </div>
+            </div>
           </nav>
         </aside>
 
