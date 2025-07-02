@@ -1,74 +1,74 @@
 
 import React from 'react';
 import { Card, CardContent } from '@/components/ui/card';
-import { merge, split, compress, file-text, word, file-excel, file-pdf, pencil } from 'lucide-react';
+import { Merge, Split, FileArchive, FileText, FileText as Word, FileSpreadsheet, FileType, Edit } from 'lucide-react';
 
 const pdfTools = [
   {
-    icon: merge,
+    icon: Merge,
     title: 'Merge PDF',
     description: 'Combine PDFs in the order you want with the easiest PDF merger available.',
     color: 'bg-red-500',
     iconBg: 'bg-red-100'
   },
   {
-    icon: split,
+    icon: Split,
     title: 'Split PDF',
     description: 'Separate one page or a whole set for easy conversion into independent PDF files.',
     color: 'bg-red-500',
     iconBg: 'bg-red-100'
   },
   {
-    icon: compress,
+    icon: FileArchive,
     title: 'Compress PDF',
     description: 'Reduce file size while optimizing for maximal PDF quality.',
     color: 'bg-green-500',
     iconBg: 'bg-green-100'
   },
   {
-    icon: word,
+    icon: Word,
     title: 'PDF to Word',
     description: 'Easily convert your PDF files into easy to edit DOC and DOCX documents. The converted WORD document is almost 100% accurate.',
     color: 'bg-blue-500',
     iconBg: 'bg-blue-100'
   },
   {
-    icon: file-pdf,
+    icon: FileType,
     title: 'PDF to PowerPoint',
     description: 'Turn your PDF files into easy to edit PPT and PPTX slideshows.',
     color: 'bg-orange-500',
     iconBg: 'bg-orange-100'
   },
   {
-    icon: file-excel,
+    icon: FileSpreadsheet,
     title: 'PDF to Excel',
     description: 'Pull data straight from PDFs into Excel spreadsheets in a few short seconds.',
     color: 'bg-green-600',
     iconBg: 'bg-green-100'
   },
   {
-    icon: word,
+    icon: Word,
     title: 'Word to PDF',
     description: 'Make DOC and DOCX files easy to read by converting them to PDF.',
     color: 'bg-blue-500',
     iconBg: 'bg-blue-100'
   },
   {
-    icon: file-pdf,
+    icon: FileType,
     title: 'PowerPoint to PDF',
     description: 'Make PPT and PPTX slideshows easy to view by converting them to PDF.',
     color: 'bg-orange-500',
     iconBg: 'bg-orange-100'
   },
   {
-    icon: file-excel,
+    icon: FileSpreadsheet,
     title: 'Excel to PDF',
     description: 'Make EXCEL spreadsheets easy to read by converting them to PDF.',
     color: 'bg-green-600',
     iconBg: 'bg-green-100'
   },
   {
-    icon: pencil,
+    icon: Edit,
     title: 'Edit PDF',
     description: 'Add text, images, shapes or freehand annotations to a PDF document. Edit the size, font, and color of the added content.',
     color: 'bg-purple-500',
