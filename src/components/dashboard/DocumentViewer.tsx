@@ -8,7 +8,7 @@ import { Input } from '@/components/ui/input';
 import { Badge } from '@/components/ui/badge';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { useToast } from '@/hooks/use-toast';
-import { ArrowLeft, Share2, PenTool, Save, Users, Type, Calendar, FileText, User, Building, AlertCircle } from 'lucide-react';
+import { ArrowLeft, Share2, PenTool, Save, Users, Type, Calendar, FileText, User, Building, AlertCircle, Download } from 'lucide-react';
 import { SignatureCapture } from './SignatureCapture';
 
 interface SignatureField {
@@ -21,6 +21,7 @@ interface SignatureField {
   page_number: number;
   field_type: 'signature' | 'date' | 'text' | 'name' | 'initials' | 'company';
   is_required: boolean;
+  signature_data?: string;
 }
 
 const fieldTypes = [
@@ -46,6 +47,8 @@ export const DocumentViewer = () => {
   const [pdfError, setPdfError] = useState<string>('');
   const [showSignatureCapture, setShowSignatureCapture] = useState(false);
   const [pendingSignaturePosition, setPendingSignaturePosition] = useState<{ x: number; y: number } | null>(null);
+  const [draggingField, setDraggingField] = useState<number | null>(null);
+  const [dragOffset, setDragOffset] = useState<{ x: number; y: number }>({ x: 0, y: 0 });
 
   // Fetch document details
   const { data: document, isLoading } = useQuery({
@@ -189,6 +192,7 @@ export const DocumentViewer = () => {
       page_number: 1,
       field_type: selectedFieldType as SignatureField['field_type'],
       is_required: true,
+      signature_data: signatureData,
     };
 
     setSignatureFields([...signatureFields, newField]);
@@ -212,6 +216,52 @@ export const DocumentViewer = () => {
 
   const getFieldDisplayInfo = (fieldType: string) => {
     return fieldTypes.find(f => f.value === fieldType) || fieldTypes[0];
+  };
+
+  const handleFieldMouseDown = (e: React.MouseEvent, index: number) => {
+    e.preventDefault();
+    e.stopPropagation();
+    const rect = e.currentTarget.getBoundingClientRect();
+    const parentRect = e.currentTarget.parentElement?.getBoundingClientRect();
+    if (parentRect) {
+      setDragOffset({
+        x: e.clientX - rect.left,
+        y: e.clientY - rect.top,
+      });
+      setDraggingField(index);
+    }
+  };
+
+  const handleMouseMove = (e: React.MouseEvent<HTMLDivElement>) => {
+    if (draggingField !== null) {
+      e.preventDefault();
+      const rect = e.currentTarget.getBoundingClientRect();
+      const x = ((e.clientX - rect.left - dragOffset.x) / rect.width) * 100;
+      const y = ((e.clientY - rect.top - dragOffset.y) / rect.height) * 100;
+      
+      const updatedFields = [...signatureFields];
+      updatedFields[draggingField] = {
+        ...updatedFields[draggingField],
+        x_position: Math.max(0, Math.min(100 - (updatedFields[draggingField].width / 8), x)),
+        y_position: Math.max(0, Math.min(100 - (updatedFields[draggingField].height / 6), y)),
+      };
+      setSignatureFields(updatedFields);
+    }
+  };
+
+  const handleMouseUp = () => {
+    setDraggingField(null);
+  };
+
+  const downloadDocument = () => {
+    if (pdfUrl) {
+      const link = window.document.createElement('a');
+      link.href = pdfUrl;
+      link.download = document?.file_name || 'document.pdf';
+      window.document.body.appendChild(link);
+      link.click();
+      window.document.body.removeChild(link);
+    }
   };
 
   if (isLoading) {
@@ -267,6 +317,13 @@ export const DocumentViewer = () => {
         </div>
         
         <div className="flex items-center gap-3">
+          <Button
+            variant="outline"
+            onClick={downloadDocument}
+          >
+            <Download className="h-4 w-4 mr-2" />
+            Download
+          </Button>
           <Button
             variant="outline"
             onClick={() => navigate(`/dashboard/document/${id}/share`)}
@@ -406,7 +463,10 @@ export const DocumentViewer = () => {
           <Card>
             <CardContent className="p-0">
               <div 
-                className="relative bg-gray-100 min-h-[600px]"
+                className="relative bg-gray-100 min-h-[600px] max-h-[80vh] overflow-auto"
+                onMouseMove={handleMouseMove}
+                onMouseUp={handleMouseUp}
+                onMouseLeave={handleMouseUp}
               >
                 {pdfError ? (
                   <div className="flex flex-col items-center justify-center h-[600px] space-y-4">
@@ -417,17 +477,18 @@ export const DocumentViewer = () => {
                     </div>
                   </div>
                 ) : pdfUrl ? (
-                  <div className="relative w-full h-full">
+                  <div className="relative w-full min-h-[600px]">
                     <iframe
-                      src={`${pdfUrl}#toolbar=0&navpanes=0&scrollbar=0`}
-                      className="w-full h-[600px] border-0 pointer-events-none"
+                      src={`${pdfUrl}#toolbar=1&navpanes=1`}
+                      className="w-full min-h-[600px] border-0"
                       title="PDF Viewer"
                       onError={() => setPdfError('Failed to load PDF file')}
                     />
                     {/* Transparent overlay to capture clicks */}
                     <div 
-                      className={`absolute inset-0 w-full h-full ${isAddingField ? 'cursor-crosshair' : 'cursor-default'}`}
+                      className={`absolute inset-0 w-full h-full ${isAddingField ? 'cursor-crosshair' : draggingField !== null ? 'cursor-grabbing' : 'cursor-default'}`}
                       onClick={handlePdfClick}
+                      style={{ pointerEvents: draggingField !== null ? 'none' : 'auto' }}
                     />
                     <div className="absolute top-2 right-2 z-10">
                       <a
@@ -456,7 +517,7 @@ export const DocumentViewer = () => {
                   return (
                     <div
                       key={index}
-                      className={`absolute border-2 ${fieldInfo.color.replace('bg-', 'border-')} bg-opacity-20 ${fieldInfo.color} flex items-center justify-center text-xs font-medium text-white shadow-sm`}
+                      className={`absolute border-2 ${fieldInfo.color.replace('bg-', 'border-')} bg-opacity-20 ${fieldInfo.color} flex items-center justify-center text-xs font-medium text-white shadow-sm cursor-grab hover:shadow-lg transition-shadow ${draggingField === index ? 'cursor-grabbing z-50' : ''}`}
                       style={{
                         left: `${field.x_position}%`,
                         top: `${field.y_position}%`,
@@ -465,17 +526,27 @@ export const DocumentViewer = () => {
                         minWidth: '60px',
                         minHeight: '25px',
                       }}
+                      onMouseDown={(e) => handleFieldMouseDown(e, index)}
                     >
-                      <div className="flex items-center gap-1">
-                        <FieldIcon className="h-3 w-3" />
-                        <span className="truncate text-xs">
-                          {field.field_type === 'signature' ? 'Sign' :
-                           field.field_type === 'initials' ? 'Init' :
-                           field.field_type === 'name' ? 'Name' :
-                           field.field_type === 'date' ? 'Date' :
-                           field.field_type === 'company' ? 'Co.' : 'Text'}
-                        </span>
-                      </div>
+                      {field.signature_data && field.field_type === 'signature' ? (
+                        <img 
+                          src={field.signature_data} 
+                          alt="Signature" 
+                          className="w-full h-full object-contain"
+                          style={{ pointerEvents: 'none' }}
+                        />
+                      ) : (
+                        <div className="flex items-center gap-1 pointer-events-none">
+                          <FieldIcon className="h-3 w-3" />
+                          <span className="truncate text-xs">
+                            {field.field_type === 'signature' ? 'Sign' :
+                             field.field_type === 'initials' ? 'Init' :
+                             field.field_type === 'name' ? 'Name' :
+                             field.field_type === 'date' ? 'Date' :
+                             field.field_type === 'company' ? 'Co.' : 'Text'}
+                          </span>
+                        </div>
+                      )}
                     </div>
                   );
                 })}
