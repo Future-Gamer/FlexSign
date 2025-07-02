@@ -74,21 +74,31 @@ export const DocumentViewer = () => {
     enabled: !!id,
   });
 
-  // Get PDF URL with better error handling
+  // Get PDF URL with better error handling - use signed URL for private bucket
   useEffect(() => {
     if (document?.file_path) {
-      try {
-        const { data } = supabase.storage
-          .from('documents')
-          .getPublicUrl(document.file_path);
-        
-        console.log('PDF URL:', data.publicUrl);
-        setPdfUrl(data.publicUrl);
-        setPdfError('');
-      } catch (error) {
-        console.error('Error getting PDF URL:', error);
-        setPdfError('Failed to load PDF file');
-      }
+      const getPdfUrl = async () => {
+        try {
+          const { data, error } = await supabase.storage
+            .from('documents')
+            .createSignedUrl(document.file_path, 3600); // 1 hour expiry
+          
+          if (error) {
+            console.error('Error getting signed URL:', error);
+            setPdfError('Failed to load PDF file: ' + error.message);
+            return;
+          }
+          
+          console.log('PDF URL:', data.signedUrl);
+          setPdfUrl(data.signedUrl);
+          setPdfError('');
+        } catch (error) {
+          console.error('Error getting PDF URL:', error);
+          setPdfError('Failed to load PDF file');
+        }
+      };
+      
+      getPdfUrl();
     }
   }, [document]);
 
