@@ -9,6 +9,7 @@ import { Badge } from '@/components/ui/badge';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { useToast } from '@/hooks/use-toast';
 import { ArrowLeft, Share2, PenTool, Save, Users, Type, Calendar, FileText, User, Building, AlertCircle } from 'lucide-react';
+import { SignatureCapture } from './SignatureCapture';
 
 interface SignatureField {
   id?: string;
@@ -43,6 +44,8 @@ export const DocumentViewer = () => {
   const [isAddingField, setIsAddingField] = useState(false);
   const [pdfUrl, setPdfUrl] = useState<string>('');
   const [pdfError, setPdfError] = useState<string>('');
+  const [showSignatureCapture, setShowSignatureCapture] = useState(false);
+  const [pendingSignaturePosition, setPendingSignaturePosition] = useState<{ x: number; y: number } | null>(null);
 
   // Fetch document details
   const { data: document, isLoading } = useQuery({
@@ -162,7 +165,17 @@ export const DocumentViewer = () => {
     const x = ((event.clientX - rect.left) / rect.width) * 100;
     const y = ((event.clientY - rect.top) / rect.height) * 100;
 
-    const fieldType = fieldTypes.find(f => f.value === selectedFieldType);
+    if (selectedFieldType === 'signature') {
+      // For signatures, open the signature capture dialog
+      setPendingSignaturePosition({ x, y });
+      setShowSignatureCapture(true);
+    } else {
+      // For other field types, add them directly
+      addField(x, y);
+    }
+  };
+
+  const addField = (x: number, y: number, signatureData?: string) => {
     const fieldWidth = selectedFieldType === 'signature' ? 150 : 
                       selectedFieldType === 'initials' ? 80 : 120;
     const fieldHeight = selectedFieldType === 'signature' ? 50 : 30;
@@ -180,6 +193,13 @@ export const DocumentViewer = () => {
 
     setSignatureFields([...signatureFields, newField]);
     setIsAddingField(false);
+  };
+
+  const handleSignatureComplete = (signatureData: string) => {
+    if (pendingSignaturePosition) {
+      addField(pendingSignaturePosition.x, pendingSignaturePosition.y, signatureData);
+      setPendingSignaturePosition(null);
+    }
   };
 
   const removeField = (index: number) => {
@@ -386,8 +406,7 @@ export const DocumentViewer = () => {
           <Card>
             <CardContent className="p-0">
               <div 
-                className="relative bg-gray-100 min-h-[600px] cursor-crosshair"
-                onClick={handlePdfClick}
+                className="relative bg-gray-100 min-h-[600px]"
               >
                 {pdfError ? (
                   <div className="flex flex-col items-center justify-center h-[600px] space-y-4">
@@ -401,9 +420,14 @@ export const DocumentViewer = () => {
                   <div className="relative w-full h-full">
                     <iframe
                       src={`${pdfUrl}#toolbar=0&navpanes=0&scrollbar=0`}
-                      className="w-full h-[600px] border-0"
+                      className="w-full h-[600px] border-0 pointer-events-none"
                       title="PDF Viewer"
                       onError={() => setPdfError('Failed to load PDF file')}
+                    />
+                    {/* Transparent overlay to capture clicks */}
+                    <div 
+                      className={`absolute inset-0 w-full h-full ${isAddingField ? 'cursor-crosshair' : 'cursor-default'}`}
+                      onClick={handlePdfClick}
                     />
                     <div className="absolute top-2 right-2 z-10">
                       <a
@@ -460,6 +484,16 @@ export const DocumentViewer = () => {
           </Card>
         </div>
       </div>
+
+      {/* Signature Capture Dialog */}
+      <SignatureCapture
+        isOpen={showSignatureCapture}
+        onClose={() => {
+          setShowSignatureCapture(false);
+          setPendingSignaturePosition(null);
+        }}
+        onSignatureComplete={handleSignatureComplete}
+      />
     </div>
   );
 };
