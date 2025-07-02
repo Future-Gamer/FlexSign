@@ -1,73 +1,89 @@
-# Welcome to your Lovable project
+# FlexSign
 
-## Project info
+**FlexSign** is a modern, intuitive document signing and management platform designed to simplify digital agreements for individuals and teams. Built with React, Supabase, and Vite, it streamlines the process of uploading, signing, and tracking documents securely—all in one place.
 
-**URL**: https://lovable.dev/projects/748769bd-5a68-4168-a75a-caaec5c3b72c
+---
 
-## How can I edit this code?
+## 🚀 Features
 
-There are several ways of editing your application.
+- **Secure Document Upload:** Easily upload and store documents with robust security.
+- **Electronic Signatures:** Sign documents digitally with a seamless workflow.
+- **Document Dashboard:** Track document status, view history, and manage all your files in one dashboard.
+- **User Authentication:** Secure login and user management powered by Supabase Auth.
+- **Role-Based Access:** Assign roles and permissions for senders, signers, and admins.
+- **Real-Time Updates:** Instantly see changes and status updates as documents move through the signing process.
+- **Notifications & Alerts:** Get notified when documents are signed or require your attention.
+- **Modern UI:** Clean, responsive interface built with shadcn-ui and Tailwind CSS.
+  
+---
 
-**Use Lovable**
+## 🛠️ Tech Stack
 
-Simply visit the [Lovable Project](https://lovable.dev/projects/748769bd-5a68-4168-a75a-caaec5c3b72c) and start prompting.
+- **Frontend:** React, TypeScript, Vite, shadcn-ui, Tailwind CSS
+- **Backend:** Supabase (PostgreSQL, Auth, Storage, Realtime)
+- **State Management:** React Context API, React Query
 
-Changes made via Lovable will be committed automatically to this repo.
+---
 
-**Use your preferred IDE**
+## 📦 Getting Started
 
-If you want to work locally using your own IDE, you can clone this repo and push changes. Pushed changes will also be reflected in Lovable.
+### 1. Clone the Repository
 
-The only requirement is having Node.js & npm installed - [install with nvm](https://github.com/nvm-sh/nvm#installing-and-updating)
+```bash
+   git clone <YOUR_GIT_URL>
+   cd flexsign
+```
 
-Follow these steps:
+### 2. Install Dependencies
 
-```sh
-# Step 1: Clone the repository using the project's Git URL.
-git clone <YOUR_GIT_URL>
+```bash
+npm install
+```
 
-# Step 2: Navigate to the project directory.
-cd <YOUR_PROJECT_NAME>
+### 3. Configure Environment Variables
 
-# Step 3: Install the necessary dependencies.
-npm i
+Create a `.env` file in the project root and add your Supabase credentials:
 
-# Step 4: Start the development server with auto-reloading and an instant preview.
+```env
+VITE_SUPABASE_URL=your-supabase-url
+VITE_SUPABASE_ANON_KEY=your-supabase-anon-key
+VITE_API_URL=your-api-url
+```
+
+### 4. Run the Development Server
+
+```bash
 npm run dev
 ```
 
-**Edit a file directly in GitHub**
+The app will be available at [http://localhost:5173](http://localhost:5173) (or the port specified by Vite).
 
-- Navigate to the desired file(s).
-- Click the "Edit" button (pencil icon) at the top right of the file view.
-- Make your changes and commit the changes.
+---
 
-**Use GitHub Codespaces**
+## 📚 Usage
 
-- Navigate to the main page of your repository.
-- Click on the "Code" button (green button) near the top right.
-- Select the "Codespaces" tab.
-- Click on "New codespace" to launch a new Codespace environment.
-- Edit files directly within the Codespace and commit and push your changes once you're done.
+-**Upload Documents:** Start by uploading the document you want to sign or send.
+-**Invite Signers:** Add recipients and assign signing roles.
+-**Sign & Track:** Sign documents electronically and track their status in real time.
+-**Manage Documents:** Access all your documents and signing history from the dashboard.
 
-## What technologies are used for this project?
+---
 
-This project is built with:
+## 📝 Contributing
 
-- Vite
-- TypeScript
-- React
+Contributions are welcome! Please open issues or submit pull requests for improvements and bug fixes.
+
+---
+
+
+## 🙏 Acknowledgements
+
+- [Supabase](https://supabase.com/)
 - shadcn-ui
-- Tailwind CSS
+- [Vite](https://vitejs.dev/)
+- [React Query](https://tanstack.com/query/latest)
+- [Tailwind CSS](https://tailwindcss.com/)
 
-## How can I deploy this project?
+---
 
-Simply open [Lovable](https://lovable.dev/projects/748769bd-5a68-4168-a75a-caaec5c3b72c) and click on Share -> Publish.
-
-## Can I connect a custom domain to my Lovable project?
-
-Yes, you can!
-
-To connect a domain, navigate to Project > Settings > Domains and click Connect Domain.
-
-Read more here: [Setting up a custom domain](https://docs.lovable.dev/tips-tricks/custom-domain#step-by-step-guide)
+**FlexSign** – Making digital document signing secure, simple, and efficient.
