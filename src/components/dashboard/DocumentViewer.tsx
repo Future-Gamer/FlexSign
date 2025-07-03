@@ -10,6 +10,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { useToast } from '@/hooks/use-toast';
 import { ArrowLeft, Share2, PenTool, Save, Users, Type, Calendar, FileText, User, Building, AlertCircle, Download } from 'lucide-react';
 import { SignatureCapture } from './SignatureCapture';
+import { FieldInputDialog } from './FieldInputDialog';
 
 interface SignatureField {
   id?: string;
@@ -46,7 +47,9 @@ export const DocumentViewer = () => {
   const [pdfUrl, setPdfUrl] = useState<string>('');
   const [pdfError, setPdfError] = useState<string>('');
   const [showSignatureCapture, setShowSignatureCapture] = useState(false);
+  const [showFieldInputDialog, setShowFieldInputDialog] = useState(false);
   const [pendingSignaturePosition, setPendingSignaturePosition] = useState<{ x: number; y: number } | null>(null);
+  const [pendingFieldPosition, setPendingFieldPosition] = useState<{ x: number; y: number } | null>(null);
   const [draggingField, setDraggingField] = useState<number | null>(null);
   const [dragOffset, setDragOffset] = useState<{ x: number; y: number }>({ x: 0, y: 0 });
 
@@ -113,7 +116,8 @@ export const DocumentViewer = () => {
     if (existingFields) {
       setSignatureFields(existingFields.map(field => ({
         ...field,
-        field_type: field.field_type as SignatureField['field_type']
+        field_type: field.field_type as SignatureField['field_type'],
+        signature_data: field.signature_data || undefined
       })));
     }
   }, [existingFields]);
@@ -140,6 +144,7 @@ export const DocumentViewer = () => {
               page_number: field.page_number,
               field_type: field.field_type,
               is_required: field.is_required,
+              signature_data: field.signature_data,
             }))
           );
         if (error) throw error;
@@ -173,12 +178,13 @@ export const DocumentViewer = () => {
       setPendingSignaturePosition({ x, y });
       setShowSignatureCapture(true);
     } else {
-      // For other field types, add them directly
-      addField(x, y);
+      // For other field types, open input dialog
+      setPendingFieldPosition({ x, y });
+      setShowFieldInputDialog(true);
     }
   };
 
-  const addField = (x: number, y: number, signatureData?: string) => {
+  const addField = (x: number, y: number, fieldData?: string) => {
     const fieldWidth = selectedFieldType === 'signature' ? 150 : 
                       selectedFieldType === 'initials' ? 80 : 120;
     const fieldHeight = selectedFieldType === 'signature' ? 50 : 30;
@@ -192,7 +198,7 @@ export const DocumentViewer = () => {
       page_number: 1,
       field_type: selectedFieldType as SignatureField['field_type'],
       is_required: true,
-      signature_data: signatureData,
+      signature_data: fieldData,
     };
 
     setSignatureFields([...signatureFields, newField]);
@@ -203,6 +209,13 @@ export const DocumentViewer = () => {
     if (pendingSignaturePosition) {
       addField(pendingSignaturePosition.x, pendingSignaturePosition.y, signatureData);
       setPendingSignaturePosition(null);
+    }
+  };
+
+  const handleFieldInputComplete = (value: string) => {
+    if (pendingFieldPosition) {
+      addField(pendingFieldPosition.x, pendingFieldPosition.y, value);
+      setPendingFieldPosition(null);
     }
   };
 
@@ -528,13 +541,19 @@ export const DocumentViewer = () => {
                       }}
                       onMouseDown={(e) => handleFieldMouseDown(e, index)}
                     >
-                      {field.signature_data && field.field_type === 'signature' ? (
-                        <img 
-                          src={field.signature_data} 
-                          alt="Signature" 
-                          className="w-full h-full object-contain"
-                          style={{ pointerEvents: 'none' }}
-                        />
+                      {field.signature_data ? (
+                        field.field_type === 'signature' ? (
+                          <img 
+                            src={field.signature_data} 
+                            alt="Signature" 
+                            className="w-full h-full object-contain"
+                            style={{ pointerEvents: 'none' }}
+                          />
+                        ) : (
+                          <div className="w-full h-full flex items-center justify-center text-black bg-white bg-opacity-90 rounded text-xs font-medium" style={{ pointerEvents: 'none' }}>
+                            {field.signature_data}
+                          </div>
+                        )
                       ) : (
                         <div className="flex items-center gap-1 pointer-events-none">
                           <FieldIcon className="h-3 w-3" />
@@ -564,6 +583,17 @@ export const DocumentViewer = () => {
           setPendingSignaturePosition(null);
         }}
         onSignatureComplete={handleSignatureComplete}
+      />
+
+      {/* Field Input Dialog */}
+      <FieldInputDialog
+        isOpen={showFieldInputDialog}
+        fieldType={selectedFieldType as 'initials' | 'name' | 'date' | 'text' | 'company'}
+        onClose={() => {
+          setShowFieldInputDialog(false);
+          setPendingFieldPosition(null);
+        }}
+        onComplete={handleFieldInputComplete}
       />
     </div>
   );
