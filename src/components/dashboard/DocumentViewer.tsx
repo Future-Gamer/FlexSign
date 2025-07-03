@@ -117,7 +117,7 @@ export const DocumentViewer = () => {
       setSignatureFields(existingFields.map(field => ({
         ...field,
         field_type: field.field_type as SignatureField['field_type'],
-        signature_data: field.signature_data || undefined
+        signature_data: (field as any).signature_data || undefined
       })));
     }
   }, [existingFields]);

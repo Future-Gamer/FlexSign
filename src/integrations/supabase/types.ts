@@ -154,6 +154,7 @@ export type Database = {
           id: string
           is_required: boolean | null
           page_number: number
+          signature_data: string | null
           signer_email: string
           width: number | null
           x_position: number
@@ -167,6 +168,7 @@ export type Database = {
           id?: string
           is_required?: boolean | null
           page_number?: number
+          signature_data?: string | null
           signer_email: string
           width?: number | null
           x_position: number
@@ -180,6 +182,7 @@ export type Database = {
           id?: string
           is_required?: boolean | null
           page_number?: number
+          signature_data?: string | null
           signer_email?: string
           width?: number | null
           x_position?: number
