@@ -11,6 +11,7 @@ import { useToast } from '@/hooks/use-toast';
 import { ArrowLeft, Share2, PenTool, Save, Users, Type, Calendar, FileText, User, Building, AlertCircle, Download } from 'lucide-react';
 import { SignatureCapture } from './SignatureCapture';
 import { FieldInputDialog } from './FieldInputDialog';
+import { generatePDFWithFields } from '@/utils/pdfGenerator';
 
 interface SignatureField {
   id?: string;
@@ -266,14 +267,34 @@ export const DocumentViewer = () => {
     setDraggingField(null);
   };
 
-  const downloadDocument = () => {
-    if (pdfUrl) {
-      const link = window.document.createElement('a');
-      link.href = pdfUrl;
-      link.download = document?.file_name || 'document.pdf';
-      window.document.body.appendChild(link);
-      link.click();
-      window.document.body.removeChild(link);
+  const downloadDocument = async () => {
+    if (!pdfUrl || !document) return;
+
+    try {
+      // Show loading state
+      toast({
+        title: 'Generating PDF',
+        description: 'Please wait while we prepare your document with all the fields...',
+      });
+
+      // Generate PDF with fields
+      await generatePDFWithFields(
+        pdfUrl,
+        signatureFields,
+        document.file_name || 'document.pdf'
+      );
+
+      toast({
+        title: 'Download Complete',
+        description: 'Your document with all fields has been downloaded successfully.',
+      });
+    } catch (error) {
+      console.error('Error downloading document:', error);
+      toast({
+        title: 'Download Failed',
+        description: 'Failed to generate the document. Please try again.',
+        variant: 'destructive',
+      });
     }
   };
 
