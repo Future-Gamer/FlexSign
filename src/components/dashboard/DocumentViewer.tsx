@@ -499,7 +499,7 @@ export const DocumentViewer = () => {
         <div className="lg:col-span-3">
           <Card>
             <CardContent className="p-0">
-              <div className="relative bg-gray-100">
+              <div className="relative">
                 {pdfError ? (
                   <div className="flex flex-col items-center justify-center h-[600px] space-y-4">
                     <AlertCircle className="h-12 w-12 text-red-500" />
@@ -509,32 +509,43 @@ export const DocumentViewer = () => {
                     </div>
                   </div>
                 ) : pdfUrl ? (
-                  <div className="h-[80vh] relative">
+                  <div className="relative">
                     <div 
-                      className="relative w-full h-full"
+                      className="relative"
                       onMouseMove={handleMouseMove}
                       onMouseUp={handleMouseUp}
                       onMouseLeave={handleMouseUp}
+                      style={{ height: '90vh' }}
                     >
                       <iframe
-                        src={`${pdfUrl}#toolbar=1&navpanes=1&scrollbar=1&view=FitH`}
-                        className="w-full h-full border-0"
+                        src={`${pdfUrl}#toolbar=1&navpanes=1&scrollbar=1&view=FitV&zoom=page-fit`}
+                        className="w-full h-full border-0 rounded-lg"
                         title="PDF Viewer"
                         onError={() => setPdfError('Failed to load PDF file')}
-                        style={{ minHeight: '100%' }}
+                        style={{ 
+                          minHeight: '100%',
+                          overflow: 'auto'
+                        }}
+                        allow="fullscreen"
+                        loading="lazy"
                       />
+                      
                       {/* Transparent overlay to capture clicks */}
                       <div 
                         className={`absolute inset-0 w-full h-full ${isAddingField ? 'cursor-crosshair' : draggingField !== null ? 'cursor-grabbing' : 'cursor-default'}`}
                         onClick={handlePdfClick}
-                        style={{ pointerEvents: draggingField !== null ? 'none' : 'auto' }}
+                        style={{ 
+                          pointerEvents: draggingField !== null ? 'none' : isAddingField ? 'auto' : 'none',
+                          zIndex: isAddingField ? 10 : 1
+                        }}
                       />
-                      <div className="absolute top-2 right-2 z-10">
+                      
+                      <div className="absolute top-2 right-2 z-20">
                         <a
                           href={pdfUrl}
                           target="_blank"
                           rel="noopener noreferrer"
-                          className="bg-blue-600 text-white px-3 py-1 rounded text-sm hover:bg-blue-700"
+                          className="bg-blue-600 text-white px-3 py-1 rounded text-sm hover:bg-blue-700 shadow-lg"
                         >
                           Open in new tab
                         </a>
@@ -547,7 +558,7 @@ export const DocumentViewer = () => {
                         return (
                           <div
                             key={index}
-                            className={`absolute border-2 ${fieldInfo.color.replace('bg-', 'border-')} bg-opacity-20 ${fieldInfo.color} flex items-center justify-center text-xs font-medium text-white shadow-sm cursor-grab hover:shadow-lg transition-shadow ${draggingField === index ? 'cursor-grabbing z-50' : ''}`}
+                            className={`absolute border-2 ${fieldInfo.color.replace('bg-', 'border-')} bg-opacity-20 ${fieldInfo.color} flex items-center justify-center text-xs font-medium text-white shadow-sm cursor-grab hover:shadow-lg transition-shadow ${draggingField === index ? 'cursor-grabbing z-50' : 'z-30'}`}
                             style={{
                               left: `${field.x_position}%`,
                               top: `${field.y_position}%`,
