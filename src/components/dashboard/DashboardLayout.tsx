@@ -34,7 +34,7 @@ export const DashboardLayout: React.FC<DashboardLayoutProps> = ({ children }) =>
               <div className="bg-blue-600 p-2 rounded-lg">
                 <FileText className="h-6 w-6 text-white" />
               </div>
-              <span className="text-xl font-bold text-gray-900">DocuSign</span>
+              <span className="text-xl font-bold text-gray-900">FlexSign</span>
             </div>
             
             <div className="flex items-center gap-4">
