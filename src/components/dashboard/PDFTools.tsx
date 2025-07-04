@@ -1,5 +1,6 @@
 
 import React from 'react';
+import { useNavigate } from 'react-router-dom';
 import { Card, CardContent } from '@/components/ui/card';
 import { Merge, Split, FileArchive, FileText, FileText as Word, FileSpreadsheet, FileType, Edit } from 'lucide-react';
 
@@ -78,6 +79,12 @@ const pdfTools = [
 ];
 
 export const PDFTools = () => {
+  const navigate = useNavigate();
+
+  const handleToolClick = () => {
+    navigate('/dashboard/pdf-tools');
+  };
+
   return (
     <div className="space-y-8">
       <div className="text-center space-y-4">
@@ -94,7 +101,7 @@ export const PDFTools = () => {
         {pdfTools.map((tool, index) => {
           const IconComponent = tool.icon;
           return (
-            <Card key={index} className="hover:shadow-lg transition-shadow cursor-pointer group">
+            <Card key={index} className="hover:shadow-lg transition-shadow cursor-pointer group" onClick={handleToolClick}>
               <CardContent className="p-6 text-center space-y-4">
                 <div className="relative">
                   <div className={`w-16 h-16 ${tool.iconBg} rounded-lg flex items-center justify-center mx-auto group-hover:scale-110 transition-transform`}>

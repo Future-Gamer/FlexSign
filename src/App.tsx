@@ -9,6 +9,7 @@ import Index from "./pages/Index";
 import Dashboard from "./pages/Dashboard";
 import Upload from "./pages/Upload";
 import DocumentView from "./pages/DocumentView";
+import PDFTools from "./pages/PDFTools";
 import NotFound from "./pages/NotFound";
 
 const queryClient = new QueryClient();
@@ -61,6 +62,14 @@ const App = () => (
               element={
                 <ProtectedRoute>
                   <DocumentView />
+                </ProtectedRoute>
+              } 
+            />
+            <Route 
+              path="/dashboard/pdf-tools" 
+              element={
+                <ProtectedRoute>
+                  <PDFTools />
                 </ProtectedRoute>
               } 
             />

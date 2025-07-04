@@ -1,3 +1,4 @@
+
 import React, { useState, useEffect } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
@@ -7,6 +8,7 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Badge } from '@/components/ui/badge';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
+import { ScrollArea } from '@/components/ui/scroll-area';
 import { useToast } from '@/hooks/use-toast';
 import { ArrowLeft, Share2, PenTool, Save, Users, Type, Calendar, FileText, User, Building, AlertCircle, Download } from 'lucide-react';
 import { SignatureCapture } from './SignatureCapture';
@@ -456,36 +458,38 @@ export const DocumentViewer = () => {
                     <Users className="h-4 w-4" />
                     Current Fields ({signatureFields.length})
                   </h4>
-                  <div className="max-h-60 overflow-y-auto space-y-2">
-                    {signatureFields.map((field, index) => {
-                      const fieldInfo = getFieldDisplayInfo(field.field_type);
-                      const FieldIcon = fieldInfo.icon;
-                      return (
-                        <div key={index} className="bg-gray-50 p-3 rounded-lg">
-                          <div className="flex items-center justify-between">
-                            <div className="flex-1">
-                              <div className="flex items-center gap-2 mb-1">
-                                <FieldIcon className="h-3 w-3" />
-                                <span className="text-xs font-medium">{fieldInfo.label}</span>
+                  <ScrollArea className="max-h-60">
+                    <div className="space-y-2 pr-2">
+                      {signatureFields.map((field, index) => {
+                        const fieldInfo = getFieldDisplayInfo(field.field_type);
+                        const FieldIcon = fieldInfo.icon;
+                        return (
+                          <div key={index} className="bg-gray-50 p-3 rounded-lg">
+                            <div className="flex items-center justify-between">
+                              <div className="flex-1">
+                                <div className="flex items-center gap-2 mb-1">
+                                  <FieldIcon className="h-3 w-3" />
+                                  <span className="text-xs font-medium">{fieldInfo.label}</span>
+                                </div>
+                                <p className="text-xs text-gray-600 truncate">{field.signer_email}</p>
+                                <p className="text-xs text-gray-500">
+                                  {Math.round(field.x_position)}%, {Math.round(field.y_position)}%
+                                </p>
                               </div>
-                              <p className="text-xs text-gray-600 truncate">{field.signer_email}</p>
-                              <p className="text-xs text-gray-500">
-                                {Math.round(field.x_position)}%, {Math.round(field.y_position)}%
-                              </p>
+                              <Button
+                                variant="ghost"
+                                size="sm"
+                                onClick={() => removeField(index)}
+                                className="text-red-600 hover:text-red-700 h-6 w-6 p-0"
+                              >
+                                ×
+                              </Button>
                             </div>
-                            <Button
-                              variant="ghost"
-                              size="sm"
-                              onClick={() => removeField(index)}
-                              className="text-red-600 hover:text-red-700 h-6 w-6 p-0"
-                            >
-                              ×
-                            </Button>
                           </div>
-                        </div>
-                      );
-                    })}
-                  </div>
+                        );
+                      })}
+                    </div>
+                  </ScrollArea>
                 </div>
               )}
             </CardContent>
@@ -496,12 +500,7 @@ export const DocumentViewer = () => {
         <div className="lg:col-span-3">
           <Card>
             <CardContent className="p-0">
-              <div 
-                className="relative bg-gray-100 min-h-[600px] max-h-[80vh] overflow-auto"
-                onMouseMove={handleMouseMove}
-                onMouseUp={handleMouseUp}
-                onMouseLeave={handleMouseUp}
-              >
+              <div className="relative bg-gray-100">
                 {pdfError ? (
                   <div className="flex flex-col items-center justify-center h-[600px] space-y-4">
                     <AlertCircle className="h-12 w-12 text-red-500" />
@@ -511,30 +510,84 @@ export const DocumentViewer = () => {
                     </div>
                   </div>
                 ) : pdfUrl ? (
-                  <div className="relative w-full min-h-[600px]">
-                    <iframe
-                      src={`${pdfUrl}#toolbar=1&navpanes=1`}
-                      className="w-full min-h-[600px] border-0"
-                      title="PDF Viewer"
-                      onError={() => setPdfError('Failed to load PDF file')}
-                    />
-                    {/* Transparent overlay to capture clicks */}
+                  <ScrollArea className="h-[80vh]">
                     <div 
-                      className={`absolute inset-0 w-full h-full ${isAddingField ? 'cursor-crosshair' : draggingField !== null ? 'cursor-grabbing' : 'cursor-default'}`}
-                      onClick={handlePdfClick}
-                      style={{ pointerEvents: draggingField !== null ? 'none' : 'auto' }}
-                    />
-                    <div className="absolute top-2 right-2 z-10">
-                      <a
-                        href={pdfUrl}
-                        target="_blank"
-                        rel="noopener noreferrer"
-                        className="bg-blue-600 text-white px-3 py-1 rounded text-sm hover:bg-blue-700"
-                      >
-                        Open in new tab
-                      </a>
+                      className="relative w-full min-h-[600px]"
+                      onMouseMove={handleMouseMove}
+                      onMouseUp={handleMouseUp}
+                      onMouseLeave={handleMouseUp}
+                    >
+                      <iframe
+                        src={`${pdfUrl}#toolbar=1&navpanes=1&scrollbar=1`}
+                        className="w-full min-h-[800px] border-0"
+                        title="PDF Viewer"
+                        onError={() => setPdfError('Failed to load PDF file')}
+                      />
+                      {/* Transparent overlay to capture clicks */}
+                      <div 
+                        className={`absolute inset-0 w-full h-full ${isAddingField ? 'cursor-crosshair' : draggingField !== null ? 'cursor-grabbing' : 'cursor-default'}`}
+                        onClick={handlePdfClick}
+                        style={{ pointerEvents: draggingField !== null ? 'none' : 'auto' }}
+                      />
+                      <div className="absolute top-2 right-2 z-10">
+                        <a
+                          href={pdfUrl}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          className="bg-blue-600 text-white px-3 py-1 rounded text-sm hover:bg-blue-700"
+                        >
+                          Open in new tab
+                        </a>
+                      </div>
+                      
+                      {/* Signature Field Overlays */}
+                      {signatureFields.map((field, index) => {
+                        const fieldInfo = getFieldDisplayInfo(field.field_type);
+                        const FieldIcon = fieldInfo.icon;
+                        return (
+                          <div
+                            key={index}
+                            className={`absolute border-2 ${fieldInfo.color.replace('bg-', 'border-')} bg-opacity-20 ${fieldInfo.color} flex items-center justify-center text-xs font-medium text-white shadow-sm cursor-grab hover:shadow-lg transition-shadow ${draggingField === index ? 'cursor-grabbing z-50' : ''}`}
+                            style={{
+                              left: `${field.x_position}%`,
+                              top: `${field.y_position}%`,
+                              width: `${(field.width / 800) * 100}%`,
+                              height: `${(field.height / 600) * 100}%`,
+                              minWidth: '60px',
+                              minHeight: '25px',
+                            }}
+                            onMouseDown={(e) => handleFieldMouseDown(e, index)}
+                          >
+                            {field.signature_data ? (
+                              field.field_type === 'signature' ? (
+                                <img 
+                                  src={field.signature_data} 
+                                  alt="Signature" 
+                                  className="w-full h-full object-contain"
+                                  style={{ pointerEvents: 'none' }}
+                                />
+                              ) : (
+                                <div className="w-full h-full flex items-center justify-center text-black bg-white bg-opacity-90 rounded text-xs font-medium" style={{ pointerEvents: 'none' }}>
+                                  {field.signature_data}
+                                </div>
+                              )
+                            ) : (
+                              <div className="flex items-center gap-1 pointer-events-none">
+                                <FieldIcon className="h-3 w-3" />
+                                <span className="truncate text-xs">
+                                  {field.field_type === 'signature' ? 'Sign' :
+                                   field.field_type === 'initials' ? 'Init' :
+                                   field.field_type === 'name' ? 'Name' :
+                                   field.field_type === 'date' ? 'Date' :
+                                   field.field_type === 'company' ? 'Co.' : 'Text'}
+                                </span>
+                              </div>
+                            )}
+                          </div>
+                        );
+                      })}
                     </div>
-                  </div>
+                  </ScrollArea>
                 ) : (
                   <div className="flex items-center justify-center h-[600px]">
                     <div className="text-center">
@@ -543,53 +596,6 @@ export const DocumentViewer = () => {
                     </div>
                   </div>
                 )}
-                
-                {/* Signature Field Overlays */}
-                {signatureFields.map((field, index) => {
-                  const fieldInfo = getFieldDisplayInfo(field.field_type);
-                  const FieldIcon = fieldInfo.icon;
-                  return (
-                    <div
-                      key={index}
-                      className={`absolute border-2 ${fieldInfo.color.replace('bg-', 'border-')} bg-opacity-20 ${fieldInfo.color} flex items-center justify-center text-xs font-medium text-white shadow-sm cursor-grab hover:shadow-lg transition-shadow ${draggingField === index ? 'cursor-grabbing z-50' : ''}`}
-                      style={{
-                        left: `${field.x_position}%`,
-                        top: `${field.y_position}%`,
-                        width: `${(field.width / 800) * 100}%`,
-                        height: `${(field.height / 600) * 100}%`,
-                        minWidth: '60px',
-                        minHeight: '25px',
-                      }}
-                      onMouseDown={(e) => handleFieldMouseDown(e, index)}
-                    >
-                      {field.signature_data ? (
-                        field.field_type === 'signature' ? (
-                          <img 
-                            src={field.signature_data} 
-                            alt="Signature" 
-                            className="w-full h-full object-contain"
-                            style={{ pointerEvents: 'none' }}
-                          />
-                        ) : (
-                          <div className="w-full h-full flex items-center justify-center text-black bg-white bg-opacity-90 rounded text-xs font-medium" style={{ pointerEvents: 'none' }}>
-                            {field.signature_data}
-                          </div>
-                        )
-                      ) : (
-                        <div className="flex items-center gap-1 pointer-events-none">
-                          <FieldIcon className="h-3 w-3" />
-                          <span className="truncate text-xs">
-                            {field.field_type === 'signature' ? 'Sign' :
-                             field.field_type === 'initials' ? 'Init' :
-                             field.field_type === 'name' ? 'Name' :
-                             field.field_type === 'date' ? 'Date' :
-                             field.field_type === 'company' ? 'Co.' : 'Text'}
-                          </span>
-                        </div>
-                      )}
-                    </div>
-                  );
-                })}
               </div>
             </CardContent>
           </Card>
