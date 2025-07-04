@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { supabase } from '@/integrations/supabase/client';
@@ -41,6 +41,7 @@ export const DocumentViewer = () => {
   const navigate = useNavigate();
   const { toast } = useToast();
   const queryClient = useQueryClient();
+  const iframeRef = useRef<HTMLIFrameElement>(null);
   
   const [signatureFields, setSignatureFields] = useState<SignatureField[]>([]);
   const [newSignerEmail, setNewSignerEmail] = useState('');
@@ -50,10 +51,11 @@ export const DocumentViewer = () => {
   const [pdfError, setPdfError] = useState<string>('');
   const [showSignatureCapture, setShowSignatureCapture] = useState(false);
   const [showFieldInputDialog, setShowFieldInputDialog] = useState(false);
-  const [pendingSignaturePosition, setPendingSignaturePosition] = useState<{ x: number; y: number } | null>(null);
-  const [pendingFieldPosition, setPendingFieldPosition] = useState<{ x: number; y: number } | null>(null);
+  const [pendingSignaturePosition, setPendingSignaturePosition] = useState<{ x: number; y: number; page: number } | null>(null);
+  const [pendingFieldPosition, setPendingFieldPosition] = useState<{ x: number; y: number; page: number } | null>(null);
   const [draggingField, setDraggingField] = useState<number | null>(null);
   const [dragOffset, setDragOffset] = useState<{ x: number; y: number }>({ x: 0, y: 0 });
+  const [pdfPageCount, setPdfPageCount] = useState<number>(1);
 
   // Fetch document details
   const { data: document, isLoading } = useQuery({
@@ -168,25 +170,54 @@ export const DocumentViewer = () => {
     },
   });
 
+  // Function to detect which page was clicked based on scroll position and click coordinates
+  const detectClickedPage = (clickY: number, containerHeight: number, scrollTop: number): number => {
+    // Estimate page height (this is an approximation)
+    const estimatedPageHeight = containerHeight / Math.max(pdfPageCount, 1);
+    const totalScrollOffset = scrollTop + clickY;
+    const pageNumber = Math.floor(totalScrollOffset / estimatedPageHeight) + 1;
+    
+    console.log('Click detection:', { clickY, containerHeight, scrollTop, estimatedPageHeight, totalScrollOffset, pageNumber });
+    
+    // Ensure page number is within valid range
+    return Math.max(1, Math.min(pageNumber, pdfPageCount));
+  };
+
   const handlePdfClick = (event: React.MouseEvent<HTMLDivElement>) => {
     if (!isAddingField || !newSignerEmail.trim()) return;
 
     const rect = event.currentTarget.getBoundingClientRect();
-    const x = ((event.clientX - rect.left) / rect.width) * 100;
-    const y = ((event.clientY - rect.top) / rect.height) * 100;
+    const clickX = event.clientX - rect.left;
+    const clickY = event.clientY - rect.top;
+    
+    // Get iframe scroll position if possible
+    let scrollTop = 0;
+    try {
+      if (iframeRef.current && iframeRef.current.contentWindow) {
+        scrollTop = iframeRef.current.contentWindow.pageYOffset || 0;
+      }
+    } catch (e) {
+      console.warn('Cannot access iframe scroll position due to CORS:', e);
+    }
+    
+    const x = (clickX / rect.width) * 100;
+    const y = (clickY / rect.height) * 100;
+    const detectedPage = detectClickedPage(clickY, rect.height, scrollTop);
+
+    console.log('PDF clicked at:', { x, y, detectedPage, clickX, clickY, scrollTop });
 
     if (selectedFieldType === 'signature') {
       // For signatures, open the signature capture dialog
-      setPendingSignaturePosition({ x, y });
+      setPendingSignaturePosition({ x, y, page: detectedPage });
       setShowSignatureCapture(true);
     } else {
       // For other field types, open input dialog
-      setPendingFieldPosition({ x, y });
+      setPendingFieldPosition({ x, y, page: detectedPage });
       setShowFieldInputDialog(true);
     }
   };
 
-  const addField = (x: number, y: number, fieldData?: string) => {
+  const addField = (x: number, y: number, page: number, fieldData?: string) => {
     const fieldWidth = selectedFieldType === 'signature' ? 150 : 
                       selectedFieldType === 'initials' ? 80 : 120;
     const fieldHeight = selectedFieldType === 'signature' ? 50 : 30;
@@ -197,26 +228,27 @@ export const DocumentViewer = () => {
       width: fieldWidth,
       height: fieldHeight,
       signer_email: newSignerEmail.trim(),
-      page_number: 1,
+      page_number: page,
       field_type: selectedFieldType as SignatureField['field_type'],
       is_required: true,
       signature_data: fieldData,
     };
 
+    console.log('Adding field:', newField);
     setSignatureFields([...signatureFields, newField]);
     setIsAddingField(false);
   };
 
   const handleSignatureComplete = (signatureData: string) => {
     if (pendingSignaturePosition) {
-      addField(pendingSignaturePosition.x, pendingSignaturePosition.y, signatureData);
+      addField(pendingSignaturePosition.x, pendingSignaturePosition.y, pendingSignaturePosition.page, signatureData);
       setPendingSignaturePosition(null);
     }
   };
 
   const handleFieldInputComplete = (value: string) => {
     if (pendingFieldPosition) {
-      addField(pendingFieldPosition.x, pendingFieldPosition.y, value);
+      addField(pendingFieldPosition.x, pendingFieldPosition.y, pendingFieldPosition.page, value);
       setPendingFieldPosition(null);
     }
   };
@@ -419,7 +451,7 @@ export const DocumentViewer = () => {
                     setIsAddingField(true);
                     toast({
                       title: 'Click on PDF',
-                      description: `Click where you want to place the ${getFieldDisplayInfo(selectedFieldType).label.toLowerCase()}.`,
+                      description: `Click on any page where you want to place the ${getFieldDisplayInfo(selectedFieldType).label.toLowerCase()}.`,
                     });
                   } else {
                     toast({
@@ -472,7 +504,7 @@ export const DocumentViewer = () => {
                                 </div>
                                 <p className="text-xs text-gray-600 truncate">{field.signer_email}</p>
                                 <p className="text-xs text-gray-500">
-                                  {Math.round(field.x_position)}%, {Math.round(field.y_position)}%
+                                  Page {field.page_number} - {Math.round(field.x_position)}%, {Math.round(field.y_position)}%
                                 </p>
                               </div>
                               <Button
@@ -518,6 +550,7 @@ export const DocumentViewer = () => {
                       style={{ height: '90vh' }}
                     >
                       <iframe
+                        ref={iframeRef}
                         src={`${pdfUrl}#toolbar=1&navpanes=1&scrollbar=1&view=FitV&zoom=page-fit`}
                         className="w-full h-full border-0 rounded-lg"
                         title="PDF Viewer"
@@ -555,6 +588,7 @@ export const DocumentViewer = () => {
                       {signatureFields.map((field, index) => {
                         const fieldInfo = getFieldDisplayInfo(field.field_type);
                         const FieldIcon = fieldInfo.icon;
+                        
                         return (
                           <div
                             key={index}
@@ -568,6 +602,7 @@ export const DocumentViewer = () => {
                               minHeight: '25px',
                             }}
                             onMouseDown={(e) => handleFieldMouseDown(e, index)}
+                            title={`Page ${field.page_number} - ${fieldInfo.label} for ${field.signer_email}`}
                           >
                             {field.signature_data ? (
                               field.field_type === 'signature' ? (
@@ -586,7 +621,7 @@ export const DocumentViewer = () => {
                               <div className="flex items-center gap-1 pointer-events-none">
                                 <FieldIcon className="h-3 w-3" />
                                 <span className="truncate text-xs">
-                                  {field.field_type === 'signature' ? 'Sign' :
+                                  P{field.page_number} {field.field_type === 'signature' ? 'Sign' :
                                    field.field_type === 'initials' ? 'Init' :
                                    field.field_type === 'name' ? 'Name' :
                                    field.field_type === 'date' ? 'Date' :
