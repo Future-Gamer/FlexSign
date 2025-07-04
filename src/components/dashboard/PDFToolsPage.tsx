@@ -15,17 +15,48 @@ import {
   Upload,
   Download
 } from 'lucide-react';
+import {
+  mergePDFs,
+  splitPDF,
+  compressPDF,
+  pdfToWord,
+  pdfToPowerPoint,
+  pdfToExcel,
+  wordToPDF,
+  powerPointToPDF,
+  excelToPDF,
+  editPDF,
+  ProcessingResult
+} from '@/utils/pdfProcessors';
 
 export const PDFToolsPage = () => {
   const { toast } = useToast();
   const [isProcessing, setIsProcessing] = useState(false);
   const [selectedFiles, setSelectedFiles] = useState<FileList | null>(null);
+  const [processingTool, setProcessingTool] = useState<string>('');
 
   const handleFileSelect = (event: React.ChangeEvent<HTMLInputElement>) => {
     setSelectedFiles(event.target.files);
   };
 
-  const processFile = async (operation: string) => {
+  const downloadFile = (result: ProcessingResult) => {
+    const url = URL.createObjectURL(result.blob);
+    const link = document.createElement('a');
+    link.href = url;
+    link.download = result.filename;
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+    URL.revokeObjectURL(url);
+  };
+
+  const downloadMultipleFiles = (results: ProcessingResult[]) => {
+    results.forEach(result => {
+      setTimeout(() => downloadFile(result), 100);
+    });
+  };
+
+  const processFile = async (operation: string, toolName: string) => {
     if (!selectedFiles || selectedFiles.length === 0) {
       toast({
         title: 'No Files Selected',
@@ -36,40 +67,89 @@ export const PDFToolsPage = () => {
     }
 
     setIsProcessing(true);
+    setProcessingTool(toolName);
+    
     toast({
       title: 'Processing...',
       description: `${operation} operation in progress...`,
     });
 
     try {
-      // Simulate processing time
-      await new Promise(resolve => setTimeout(resolve, 2000));
-      
-      // Create a download link for the processed file
-      const processedFileName = `processed-${operation.toLowerCase().replace(' ', '-')}-${selectedFiles[0].name}`;
-      const blob = new Blob(['Processed file content'], { type: 'application/pdf' });
-      const url = URL.createObjectURL(blob);
-      
-      const link = document.createElement('a');
-      link.href = url;
-      link.download = processedFileName;
-      document.body.appendChild(link);
-      link.click();
-      document.body.removeChild(link);
-      URL.revokeObjectURL(url);
+      const file = selectedFiles[0];
+      let result: ProcessingResult | ProcessingResult[];
+
+      switch (operation) {
+        case 'merge':
+          if (selectedFiles.length < 2) {
+            throw new Error('Please select at least 2 PDF files to merge');
+          }
+          result = await mergePDFs(selectedFiles);
+          downloadFile(result as ProcessingResult);
+          break;
+          
+        case 'split':
+          result = await splitPDF(file);
+          downloadMultipleFiles(result as ProcessingResult[]);
+          break;
+          
+        case 'compress':
+          result = await compressPDF(file);
+          downloadFile(result as ProcessingResult);
+          break;
+          
+        case 'pdf-to-word':
+          result = await pdfToWord(file);
+          downloadFile(result as ProcessingResult);
+          break;
+          
+        case 'pdf-to-powerpoint':
+          result = await pdfToPowerPoint(file);
+          downloadFile(result as ProcessingResult);
+          break;
+          
+        case 'pdf-to-excel':
+          result = await pdfToExcel(file);
+          downloadFile(result as ProcessingResult);
+          break;
+          
+        case 'word-to-pdf':
+          result = await wordToPDF(file);
+          downloadFile(result as ProcessingResult);
+          break;
+          
+        case 'powerpoint-to-pdf':
+          result = await powerPointToPDF(file);
+          downloadFile(result as ProcessingResult);
+          break;
+          
+        case 'excel-to-pdf':
+          result = await excelToPDF(file);
+          downloadFile(result as ProcessingResult);
+          break;
+          
+        case 'edit':
+          result = await editPDF(file);
+          downloadFile(result as ProcessingResult);
+          break;
+          
+        default:
+          throw new Error('Unknown operation');
+      }
 
       toast({
         title: 'Success!',
-        description: `${operation} completed successfully. File downloaded.`,
+        description: `${toolName} completed successfully. File(s) downloaded.`,
       });
     } catch (error) {
+      console.error('Processing error:', error);
       toast({
         title: 'Error',
-        description: `Failed to ${operation.toLowerCase()}. Please try again.`,
+        description: error instanceof Error ? error.message : `Failed to ${operation}. Please try again.`,
         variant: 'destructive',
       });
     } finally {
       setIsProcessing(false);
+      setProcessingTool('');
     }
   };
 
@@ -80,17 +160,19 @@ export const PDFToolsPage = () => {
       description: 'Combine multiple PDFs into one document',
       color: 'bg-red-500',
       iconBg: 'bg-red-100',
-      action: () => processFile('Merge PDF'),
-      acceptMultiple: true
+      action: () => processFile('merge', 'Merge PDF'),
+      acceptMultiple: true,
+      acceptedTypes: '.pdf'
     },
     {
       icon: Split,
       title: 'Split PDF',
-      description: 'Split a PDF into separate pages or ranges',
+      description: 'Split a PDF into separate pages',
       color: 'bg-red-500',
       iconBg: 'bg-red-100',
-      action: () => processFile('Split PDF'),
-      acceptMultiple: false
+      action: () => processFile('split', 'Split PDF'),
+      acceptMultiple: false,
+      acceptedTypes: '.pdf'
     },
     {
       icon: FileArchive,
@@ -98,8 +180,9 @@ export const PDFToolsPage = () => {
       description: 'Reduce PDF file size while maintaining quality',
       color: 'bg-green-500',
       iconBg: 'bg-green-100',
-      action: () => processFile('Compress PDF'),
-      acceptMultiple: false
+      action: () => processFile('compress', 'Compress PDF'),
+      acceptMultiple: false,
+      acceptedTypes: '.pdf'
     },
     {
       icon: FileText,
@@ -107,8 +190,9 @@ export const PDFToolsPage = () => {
       description: 'Convert PDF to editable DOC/DOCX format',
       color: 'bg-blue-500',
       iconBg: 'bg-blue-100',
-      action: () => processFile('PDF to Word'),
-      acceptMultiple: false
+      action: () => processFile('pdf-to-word', 'PDF to Word'),
+      acceptMultiple: false,
+      acceptedTypes: '.pdf'
     },
     {
       icon: FileType,
@@ -116,8 +200,9 @@ export const PDFToolsPage = () => {
       description: 'Convert PDF to PPT/PPTX presentation',
       color: 'bg-orange-500',
       iconBg: 'bg-orange-100',
-      action: () => processFile('PDF to PowerPoint'),
-      acceptMultiple: false
+      action: () => processFile('pdf-to-powerpoint', 'PDF to PowerPoint'),
+      acceptMultiple: false,
+      acceptedTypes: '.pdf'
     },
     {
       icon: FileSpreadsheet,
@@ -125,8 +210,9 @@ export const PDFToolsPage = () => {
       description: 'Extract data from PDF to Excel spreadsheet',
       color: 'bg-green-600',
       iconBg: 'bg-green-100',
-      action: () => processFile('PDF to Excel'),
-      acceptMultiple: false
+      action: () => processFile('pdf-to-excel', 'PDF to Excel'),
+      acceptMultiple: false,
+      acceptedTypes: '.pdf'
     },
     {
       icon: FileText,
@@ -134,8 +220,9 @@ export const PDFToolsPage = () => {
       description: 'Convert DOC/DOCX to PDF format',
       color: 'bg-blue-500',
       iconBg: 'bg-blue-100',
-      action: () => processFile('Word to PDF'),
-      acceptMultiple: false
+      action: () => processFile('word-to-pdf', 'Word to PDF'),
+      acceptMultiple: false,
+      acceptedTypes: '.doc,.docx'
     },
     {
       icon: FileType,
@@ -143,8 +230,9 @@ export const PDFToolsPage = () => {
       description: 'Convert PPT/PPTX to PDF format',
       color: 'bg-orange-500',
       iconBg: 'bg-orange-100',
-      action: () => processFile('PowerPoint to PDF'),
-      acceptMultiple: false
+      action: () => processFile('powerpoint-to-pdf', 'PowerPoint to PDF'),
+      acceptMultiple: false,
+      acceptedTypes: '.ppt,.pptx'
     },
     {
       icon: FileSpreadsheet,
@@ -152,8 +240,9 @@ export const PDFToolsPage = () => {
       description: 'Convert Excel spreadsheets to PDF',
       color: 'bg-green-600',
       iconBg: 'bg-green-100',
-      action: () => processFile('Excel to PDF'),
-      acceptMultiple: false
+      action: () => processFile('excel-to-pdf', 'Excel to PDF'),
+      acceptMultiple: false,
+      acceptedTypes: '.xls,.xlsx'
     },
     {
       icon: Edit,
@@ -161,8 +250,9 @@ export const PDFToolsPage = () => {
       description: 'Add text, images, and annotations to PDF',
       color: 'bg-purple-500',
       iconBg: 'bg-purple-100',
-      action: () => processFile('Edit PDF'),
-      acceptMultiple: false
+      action: () => processFile('edit', 'Edit PDF'),
+      acceptMultiple: false,
+      acceptedTypes: '.pdf'
     }
   ];
 
@@ -228,6 +318,7 @@ export const PDFToolsPage = () => {
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-5 gap-6">
         {tools.map((tool, index) => {
           const IconComponent = tool.icon;
+          const isProcessingThis = isProcessing && processingTool === tool.title;
           return (
             <Card key={index} className="hover:shadow-lg transition-shadow group">
               <CardContent className="p-6 text-center space-y-4">
@@ -250,7 +341,7 @@ export const PDFToolsPage = () => {
                   className="w-full"
                   size="sm"
                 >
-                  {isProcessing ? (
+                  {isProcessingThis ? (
                     <>
                       <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-white mr-2"></div>
                       Processing...

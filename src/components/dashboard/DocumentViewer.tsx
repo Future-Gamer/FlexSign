@@ -1,4 +1,3 @@
-
 import React, { useState, useEffect } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
@@ -510,18 +509,19 @@ export const DocumentViewer = () => {
                     </div>
                   </div>
                 ) : pdfUrl ? (
-                  <ScrollArea className="h-[80vh]">
+                  <div className="h-[80vh] relative">
                     <div 
-                      className="relative w-full min-h-[600px]"
+                      className="relative w-full h-full"
                       onMouseMove={handleMouseMove}
                       onMouseUp={handleMouseUp}
                       onMouseLeave={handleMouseUp}
                     >
                       <iframe
-                        src={`${pdfUrl}#toolbar=1&navpanes=1&scrollbar=1`}
-                        className="w-full min-h-[800px] border-0"
+                        src={`${pdfUrl}#toolbar=1&navpanes=1&scrollbar=1&view=FitH`}
+                        className="w-full h-full border-0"
                         title="PDF Viewer"
                         onError={() => setPdfError('Failed to load PDF file')}
+                        style={{ minHeight: '100%' }}
                       />
                       {/* Transparent overlay to capture clicks */}
                       <div 
@@ -587,7 +587,7 @@ export const DocumentViewer = () => {
                         );
                       })}
                     </div>
-                  </ScrollArea>
+                  </div>
                 ) : (
                   <div className="flex items-center justify-center h-[600px]">
                     <div className="text-center">
