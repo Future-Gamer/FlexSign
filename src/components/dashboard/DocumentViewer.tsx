@@ -42,6 +42,7 @@ export const DocumentViewer = () => {
   const { toast } = useToast();
   const queryClient = useQueryClient();
   const iframeRef = useRef<HTMLIFrameElement>(null);
+  const overlayRef = useRef<HTMLDivElement>(null);
   
   const [signatureFields, setSignatureFields] = useState<SignatureField[]>([]);
   const [newSignerEmail, setNewSignerEmail] = useState('');
@@ -56,6 +57,7 @@ export const DocumentViewer = () => {
   const [draggingField, setDraggingField] = useState<number | null>(null);
   const [dragOffset, setDragOffset] = useState<{ x: number; y: number }>({ x: 0, y: 0 });
   const [pdfPageCount, setPdfPageCount] = useState<number>(1);
+  const [iframeLoaded, setIframeLoaded] = useState(false);
 
   // Fetch document details
   const { data: document, isLoading } = useQuery({
@@ -126,6 +128,38 @@ export const DocumentViewer = () => {
     }
   }, [existingFields]);
 
+  // Detect PDF page count when iframe loads
+  useEffect(() => {
+    if (iframeLoaded && iframeRef.current) {
+      const iframe = iframeRef.current;
+      
+      // Try to detect page count from PDF viewer
+      const detectPageCount = () => {
+        try {
+          // This is a rough estimation - in a real app you might use a PDF parsing library
+          // For now, we'll estimate based on content height
+          const iframeDocument = iframe.contentDocument || iframe.contentWindow?.document;
+          if (iframeDocument) {
+            const body = iframeDocument.body;
+            if (body) {
+              const totalHeight = body.scrollHeight;
+              const viewportHeight = body.clientHeight;
+              const estimatedPages = Math.max(1, Math.ceil(totalHeight / viewportHeight));
+              console.log('Estimated page count:', estimatedPages);
+              setPdfPageCount(Math.min(estimatedPages, 20)); // Cap at 20 pages for safety
+            }
+          }
+        } catch (error) {
+          console.warn('Could not detect page count:', error);
+          setPdfPageCount(10); // Default fallback
+        }
+      };
+
+      // Delay detection to allow PDF to fully load
+      setTimeout(detectPageCount, 2000);
+    }
+  }, [iframeLoaded]);
+
   // Save signature fields mutation
   const saveFieldsMutation = useMutation({
     mutationFn: async (fields: SignatureField[]) => {
@@ -170,48 +204,77 @@ export const DocumentViewer = () => {
     },
   });
 
-  // Function to detect which page was clicked based on scroll position and click coordinates
-  const detectClickedPage = (clickY: number, containerHeight: number, scrollTop: number): number => {
-    // Estimate page height (this is an approximation)
-    const estimatedPageHeight = containerHeight / Math.max(pdfPageCount, 1);
-    const totalScrollOffset = scrollTop + clickY;
-    const pageNumber = Math.floor(totalScrollOffset / estimatedPageHeight) + 1;
-    
-    console.log('Click detection:', { clickY, containerHeight, scrollTop, estimatedPageHeight, totalScrollOffset, pageNumber });
-    
-    // Ensure page number is within valid range
-    return Math.max(1, Math.min(pageNumber, pdfPageCount));
+  // Improved page detection based on click position and scroll state
+  const detectClickedPage = (clickY: number, containerRect: DOMRect): number => {
+    try {
+      let scrollTop = 0;
+      
+      // Try to get scroll position from iframe
+      if (iframeRef.current?.contentWindow) {
+        scrollTop = iframeRef.current.contentWindow.pageYOffset || 0;
+      }
+      
+      // Calculate total position considering scroll
+      const totalClickPosition = scrollTop + clickY;
+      const containerHeight = containerRect.height;
+      
+      // Estimate page height (PDF pages are typically around 800-1200px in height when rendered)
+      const estimatedPageHeight = Math.max(800, containerHeight);
+      
+      // Calculate which page based on position
+      const pageNumber = Math.floor(totalClickPosition / estimatedPageHeight) + 1;
+      
+      // Ensure page number is within valid range
+      const detectedPage = Math.max(1, Math.min(pageNumber, pdfPageCount));
+      
+      console.log('Page detection:', {
+        clickY,
+        scrollTop,
+        totalClickPosition,
+        estimatedPageHeight,
+        pageNumber,
+        detectedPage,
+        pdfPageCount
+      });
+      
+      return detectedPage;
+    } catch (error) {
+      console.warn('Error detecting page:', error);
+      return 1; // Default to page 1 if detection fails
+    }
   };
 
   const handlePdfClick = (event: React.MouseEvent<HTMLDivElement>) => {
     if (!isAddingField || !newSignerEmail.trim()) return;
 
+    event.preventDefault();
+    event.stopPropagation();
+
     const rect = event.currentTarget.getBoundingClientRect();
     const clickX = event.clientX - rect.left;
     const clickY = event.clientY - rect.top;
     
-    // Get iframe scroll position if possible
-    let scrollTop = 0;
-    try {
-      if (iframeRef.current && iframeRef.current.contentWindow) {
-        scrollTop = iframeRef.current.contentWindow.pageYOffset || 0;
-      }
-    } catch (e) {
-      console.warn('Cannot access iframe scroll position due to CORS:', e);
-    }
-    
+    // Calculate relative position as percentage
     const x = (clickX / rect.width) * 100;
     const y = (clickY / rect.height) * 100;
-    const detectedPage = detectClickedPage(clickY, rect.height, scrollTop);
+    
+    // Detect which page was clicked
+    const detectedPage = detectClickedPage(clickY, rect);
 
-    console.log('PDF clicked at:', { x, y, detectedPage, clickX, clickY, scrollTop });
+    console.log('PDF clicked:', { 
+      clickX, 
+      clickY, 
+      x: Math.round(x), 
+      y: Math.round(y), 
+      detectedPage,
+      rectWidth: rect.width,
+      rectHeight: rect.height
+    });
 
     if (selectedFieldType === 'signature') {
-      // For signatures, open the signature capture dialog
       setPendingSignaturePosition({ x, y, page: detectedPage });
       setShowSignatureCapture(true);
     } else {
-      // For other field types, open input dialog
       setPendingFieldPosition({ x, y, page: detectedPage });
       setShowFieldInputDialog(true);
     }
@@ -304,13 +367,11 @@ export const DocumentViewer = () => {
     if (!pdfUrl || !document) return;
 
     try {
-      // Show loading state
       toast({
         title: 'Generating PDF',
         description: 'Please wait while we prepare your document with all the fields...',
       });
 
-      // Generate PDF with fields
       await generatePDFWithFields(
         pdfUrl,
         signatureFields,
@@ -329,6 +390,19 @@ export const DocumentViewer = () => {
         variant: 'destructive',
       });
     }
+  };
+
+  // Calculate field position for display on overlay
+  const getFieldDisplayPosition = (field: SignatureField) => {
+    // For multi-page PDFs, we need to consider which page the field is on
+    // and adjust the Y position accordingly
+    const pageOffset = (field.page_number - 1) * 100; // Each page takes 100% of viewport height
+    return {
+      left: `${field.x_position}%`,
+      top: `${field.y_position + pageOffset}%`,
+      width: `${(field.width / 800) * 100}%`,
+      height: `${(field.height / 600) * 100}%`,
+    };
   };
 
   if (isLoading) {
@@ -543,29 +617,36 @@ export const DocumentViewer = () => {
                 ) : pdfUrl ? (
                   <div className="relative">
                     <div 
+                      ref={overlayRef}
                       className="relative"
                       onMouseMove={handleMouseMove}
                       onMouseUp={handleMouseUp}
                       onMouseLeave={handleMouseUp}
-                      style={{ height: '90vh' }}
+                      style={{ height: `${Math.max(90, pdfPageCount * 100)}vh` }}
                     >
                       <iframe
                         ref={iframeRef}
-                        src={`${pdfUrl}#toolbar=1&navpanes=1&scrollbar=1&view=FitV&zoom=page-fit`}
+                        src={`${pdfUrl}#toolbar=1&navpanes=1&scrollbar=1&view=FitH&zoom=page-width`}
                         className="w-full h-full border-0 rounded-lg"
                         title="PDF Viewer"
+                        onLoad={() => {
+                          console.log('PDF iframe loaded');
+                          setIframeLoaded(true);
+                        }}
                         onError={() => setPdfError('Failed to load PDF file')}
                         style={{ 
-                          minHeight: '100%',
-                          overflow: 'auto'
+                          minHeight: '100%'
                         }}
                         allow="fullscreen"
                         loading="lazy"
                       />
                       
-                      {/* Transparent overlay to capture clicks */}
+                      {/* Click overlay for adding fields */}
                       <div 
-                        className={`absolute inset-0 w-full h-full ${isAddingField ? 'cursor-crosshair' : draggingField !== null ? 'cursor-grabbing' : 'cursor-default'}`}
+                        className={`absolute inset-0 w-full h-full ${
+                          isAddingField ? 'cursor-crosshair bg-blue-50 bg-opacity-10' : 
+                          draggingField !== null ? 'cursor-grabbing' : 'cursor-default'
+                        }`}
                         onClick={handlePdfClick}
                         style={{ 
                           pointerEvents: draggingField !== null ? 'none' : isAddingField ? 'auto' : 'none',
@@ -588,16 +669,17 @@ export const DocumentViewer = () => {
                       {signatureFields.map((field, index) => {
                         const fieldInfo = getFieldDisplayInfo(field.field_type);
                         const FieldIcon = fieldInfo.icon;
+                        const displayPosition = getFieldDisplayPosition(field);
                         
                         return (
                           <div
                             key={index}
                             className={`absolute border-2 ${fieldInfo.color.replace('bg-', 'border-')} bg-opacity-20 ${fieldInfo.color} flex items-center justify-center text-xs font-medium text-white shadow-sm cursor-grab hover:shadow-lg transition-shadow ${draggingField === index ? 'cursor-grabbing z-50' : 'z-30'}`}
                             style={{
-                              left: `${field.x_position}%`,
-                              top: `${field.y_position}%`,
-                              width: `${(field.width / 800) * 100}%`,
-                              height: `${(field.height / 600) * 100}%`,
+                              left: displayPosition.left,
+                              top: displayPosition.top,
+                              width: displayPosition.width,
+                              height: displayPosition.height,
                               minWidth: '60px',
                               minHeight: '25px',
                             }}
