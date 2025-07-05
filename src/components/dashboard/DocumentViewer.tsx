@@ -593,7 +593,7 @@ export const DocumentViewer = () => {
                         return (
                           <div
                             key={index}
-                            className={`absolute border-2 ${fieldInfo.color.replace('bg-', 'border-')} bg-opacity-20 ${fieldInfo.color} flex items-center justify-center text-xs font-medium text-white shadow-sm cursor-grab hover:shadow-lg transition-shadow ${draggingField === index ? 'cursor-grabbing z-50' : 'z-30'}`}
+                            className={`absolute border-2 ${fieldInfo.color.replace('bg-', 'border-')} bg-opacity-0 ${fieldInfo.color} flex items-center justify-center text-xs font-medium text-white shadow-sm cursor-grab hover:shadow-lg transition-shadow ${draggingField === index ? 'cursor-grabbing z-50' : 'z-30'}`}
                             style={{
                               left: `${field.x_position}%`,
                               top: `${field.y_position}%`,
