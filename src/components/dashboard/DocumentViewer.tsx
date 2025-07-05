@@ -528,7 +528,8 @@ export const DocumentViewer = () => {
         </div>
 
         {/* PDF Viewer */}
-        <div className="lg:col-span-3">
+        <div className=/*"lg:col-span-3"*/ "relative"
+        style={{ height: '100vh', width: '40vw' }}>
           <Card>
             <CardContent className="p-0">
               <div className="relative">
@@ -547,7 +548,7 @@ export const DocumentViewer = () => {
                       onMouseMove={handleMouseMove}
                       onMouseUp={handleMouseUp}
                       onMouseLeave={handleMouseUp}
-                      style={{ height: '90vh' }}
+                      style={{ height: '100vh' }}
                     >
                       <iframe
                         ref={iframeRef}
