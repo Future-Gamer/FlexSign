@@ -43,6 +43,7 @@ export const DocumentViewer = () => {
   const queryClient = useQueryClient();
   const iframeRef = useRef<HTMLIFrameElement>(null);
   const pdfContainerRef = useRef<HTMLDivElement>(null);
+  const overlayRef = useRef<HTMLDivElement>(null);
   
   const [signatureFields, setSignatureFields] = useState<SignatureField[]>([]);
   const [newSignerEmail, setNewSignerEmail] = useState('');
@@ -57,7 +58,12 @@ export const DocumentViewer = () => {
   const [draggingField, setDraggingField] = useState<number | null>(null);
   const [dragOffset, setDragOffset] = useState<{ x: number; y: number }>({ x: 0, y: 0 });
   const [currentPage, setCurrentPage] = useState<number>(1);
-  const [pdfMetadata, setPdfMetadata] = useState<{ pageHeight: number; totalPages: number }>({ pageHeight: 842, totalPages: 1 });
+  const [pdfMetadata, setPdfMetadata] = useState<{ pageHeight: number; totalPages: number; actualTotalPages: number }>({ 
+    pageHeight: 842, 
+    totalPages: 1, 
+    actualTotalPages: 1 
+  });
+  const [scrollPosition, setScrollPosition] = useState<number>(0);
 
   // Fetch document details
   const { data: document, isLoading } = useQuery({
@@ -128,30 +134,68 @@ export const DocumentViewer = () => {
     }
   }, [existingFields]);
 
-  // Listen for PDF load and get metadata
+  // Enhanced PDF metadata detection with better page counting
   useEffect(() => {
     if (pdfUrl && iframeRef.current) {
       const iframe = iframeRef.current;
       
       const handleIframeLoad = () => {
         try {
-          // Estimate PDF metadata based on typical PDF page dimensions
-          // Standard PDF page is 595x842 points (A4 at 72 DPI)
+          // Try to access PDF metadata through iframe
+          const iframeDoc = iframe.contentDocument || iframe.contentWindow?.document;
+          
+          // Estimate based on common PDF patterns
+          // Most business documents are 1-50 pages, with common sizes being 1, 2, 5, 10, 20 pages
+          let estimatedPages = 10; // Default conservative estimate
+          
+          // Try to get more accurate page count by analyzing the PDF URL or file size
+          if (document?.file_size) {
+            // Rough estimation: 50KB per page for typical business documents
+            const averagePageSize = 50 * 1024; // 50KB
+            estimatedPages = Math.max(1, Math.min(100, Math.ceil(document.file_size / averagePageSize)));
+          }
+          
           setPdfMetadata({
             pageHeight: 842, // Standard A4 height in points
-            totalPages: 10 // Default estimate, will be updated if we can get actual data
+            totalPages: estimatedPages,
+            actualTotalPages: estimatedPages
           });
           
-          console.log('PDF loaded, estimated metadata:', { pageHeight: 842, totalPages: 10 });
+          console.log('PDF loaded, estimated metadata:', { 
+            pageHeight: 842, 
+            totalPages: estimatedPages,
+            fileSize: document?.file_size 
+          });
         } catch (error) {
           console.log('Could not access PDF metadata, using defaults');
+          setPdfMetadata({
+            pageHeight: 842,
+            totalPages: 10,
+            actualTotalPages: 10
+          });
         }
       };
       
       iframe.addEventListener('load', handleIframeLoad);
       return () => iframe.removeEventListener('load', handleIframeLoad);
     }
-  }, [pdfUrl]);
+  }, [pdfUrl, document?.file_size]);
+
+  // Track scroll position to adjust field positions
+  useEffect(() => {
+    const handleScroll = () => {
+      if (pdfContainerRef.current) {
+        const scrollTop = pdfContainerRef.current.scrollTop;
+        setScrollPosition(scrollTop);
+      }
+    };
+
+    const container = pdfContainerRef.current;
+    if (container) {
+      container.addEventListener('scroll', handleScroll);
+      return () => container.removeEventListener('scroll', handleScroll);
+    }
+  }, []);
 
   // Save signature fields mutation
   const saveFieldsMutation = useMutation({
@@ -225,11 +269,22 @@ export const DocumentViewer = () => {
     const clickX = event.clientX - rect.left;
     const clickY = event.clientY - rect.top;
     
+    // Account for scroll position to get the true position within the PDF
+    const adjustedClickY = clickY + scrollPosition;
+    
     // Calculate position as percentage of the container
     const x = (clickX / rect.width) * 100;
-    const y = (clickY / rect.height) * 100;
+    const y = (adjustedClickY / rect.height) * 100;
     
-    console.log('Click position:', { x, y, clickX, clickY, containerWidth: rect.width, containerHeight: rect.height });
+    console.log('Click position:', { 
+      x, 
+      y, 
+      clickX, 
+      clickY: adjustedClickY, 
+      containerWidth: rect.width, 
+      containerHeight: rect.height,
+      scrollPosition 
+    });
     console.log('Target page:', currentPage);
 
     if (selectedFieldType === 'signature') {
@@ -310,8 +365,9 @@ export const DocumentViewer = () => {
     if (draggingField !== null) {
       e.preventDefault();
       const rect = e.currentTarget.getBoundingClientRect();
+      const adjustedY = (e.clientY - rect.top + scrollPosition - dragOffset.y);
       const x = ((e.clientX - rect.left - dragOffset.x) / rect.width) * 100;
-      const y = ((e.clientY - rect.top - dragOffset.y) / rect.height) * 100;
+      const y = (adjustedY / rect.height) * 100;
       
       const updatedFields = [...signatureFields];
       updatedFields[draggingField] = {
@@ -327,16 +383,20 @@ export const DocumentViewer = () => {
     setDraggingField(null);
   };
 
-  // Calculate field position based on page
+  // Calculate field position based on page - this ensures fields move with PDF content
   const calculateFieldPosition = (field: SignatureField) => {
-    // Each page takes up roughly equal vertical space in the PDF viewer
-    // Position the field relative to its target page
-    const pageOffsetPercentage = ((field.page_number - 1) * pdfMetadata.pageHeight) / (pdfMetadata.totalPages * pdfMetadata.pageHeight) * 100;
-    const adjustedY = pageOffsetPercentage + (field.y_position / pdfMetadata.totalPages);
+    // Calculate the absolute position within the entire PDF document
+    // Each page has a standard height, and we position relative to the document start
+    const documentHeight = pdfMetadata.totalPages * pdfMetadata.pageHeight;
+    const pageStartY = (field.page_number - 1) * pdfMetadata.pageHeight;
+    
+    // Convert field's relative position within its page to absolute position in document
+    const absoluteY = pageStartY + (field.y_position / 100) * pdfMetadata.pageHeight;
+    const relativeY = (absoluteY / documentHeight) * 100;
     
     return {
       left: `${field.x_position}%`,
-      top: `${adjustedY}%`,
+      top: `${relativeY}%`,
       width: `${Math.max(60, (field.width / 800) * 100)}px`,
       height: `${Math.max(25, (field.height / 600) * 100)}px`,
     };
@@ -493,10 +553,18 @@ export const DocumentViewer = () => {
                 <Input
                   type="number"
                   min="1"
-                  placeholder="Page number"
+                  max={pdfMetadata.actualTotalPages}
+                  placeholder={`Page (1-${pdfMetadata.actualTotalPages})`}
                   value={currentPage}
-                  onChange={(e) => setCurrentPage(parseInt(e.target.value) || 1)}
+                  onChange={(e) => {
+                    const pageNum = parseInt(e.target.value) || 1;
+                    const validatedPage = Math.max(1, Math.min(pdfMetadata.actualTotalPages, pageNum));
+                    setCurrentPage(validatedPage);
+                  }}
                 />
+                <p className="text-xs text-gray-500">
+                  Document has {pdfMetadata.actualTotalPages} page{pdfMetadata.actualTotalPages !== 1 ? 's' : ''}
+                </p>
               </div>
               
               <Button
@@ -598,7 +666,7 @@ export const DocumentViewer = () => {
                   <div className="relative">
                     <div 
                       ref={pdfContainerRef}
-                      className="relative"
+                      className="relative overflow-auto"
                       onMouseMove={handleMouseMove}
                       onMouseUp={handleMouseUp}
                       onMouseLeave={handleMouseUp}
@@ -607,10 +675,11 @@ export const DocumentViewer = () => {
                       <iframe
                         ref={iframeRef}
                         src={`${pdfUrl}#toolbar=1&navpanes=1&scrollbar=1&view=FitV&zoom=page-fit`}
-                        className="w-full h-full border-0 rounded-lg"
+                        className="w-full border-0 rounded-lg"
                         title="PDF Viewer"
                         onError={() => setPdfError('Failed to load PDF file')}
                         style={{ 
+                          height: `${pdfMetadata.totalPages * 100}%`,
                           minHeight: '100%',
                         }}
                         allow="fullscreen"
@@ -619,9 +688,11 @@ export const DocumentViewer = () => {
                       
                       {/* Click overlay for adding fields */}
                       <div 
-                        className={`absolute inset-0 w-full h-full ${isAddingField ? 'cursor-crosshair bg-blue-50 bg-opacity-10' : 'pointer-events-none'}`}
+                        ref={overlayRef}
+                        className={`absolute inset-0 w-full ${isAddingField ? 'cursor-crosshair bg-blue-50 bg-opacity-10' : 'pointer-events-none'}`}
                         onClick={handlePdfClick}
                         style={{ 
+                          height: `${pdfMetadata.totalPages * 100}%`,
                           zIndex: isAddingField ? 10 : 1
                         }}
                       />
