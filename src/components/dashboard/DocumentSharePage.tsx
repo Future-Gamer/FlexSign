@@ -1,3 +1,4 @@
+
 import React, { useState } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
@@ -23,13 +24,18 @@ export const DocumentSharePage = () => {
   const { data: document, isLoading } = useQuery({
     queryKey: ['document', id],
     queryFn: async () => {
+      console.log('Fetching document with id:', id);
       const { data, error } = await supabase
         .from('documents')
         .select('*')
         .eq('id', id)
         .single();
       
-      if (error) throw error;
+      if (error) {
+        console.error('Error fetching document:', error);
+        throw error;
+      }
+      console.log('Document fetched:', data);
       return data;
     },
   });
@@ -38,13 +44,18 @@ export const DocumentSharePage = () => {
   const { data: shares, refetch: refetchShares } = useQuery({
     queryKey: ['document-shares', id],
     queryFn: async () => {
+      console.log('Fetching shares for document:', id);
       const { data, error } = await supabase
         .from('document_shares')
         .select('*')
         .eq('document_id', id)
         .order('created_at', { ascending: false });
       
-      if (error) throw error;
+      if (error) {
+        console.error('Error fetching shares:', error);
+        throw error;
+      }
+      console.log('Shares fetched:', data);
       return data;
     },
     enabled: !!id,
@@ -53,22 +64,33 @@ export const DocumentSharePage = () => {
   // Create share mutation
   const createShareMutation = useMutation({
     mutationFn: async ({ email, expiresIn }: { email: string; expiresIn: number }) => {
+      console.log('Creating share for email:', email, 'expires in:', expiresIn, 'days');
+      
       const shareToken = crypto.randomUUID();
       const expiresAt = new Date();
       expiresAt.setDate(expiresAt.getDate() + expiresIn);
 
+      const shareData = {
+        document_id: id!,
+        recipient_email: email,
+        share_token: shareToken,
+        expires_at: expiresAt.toISOString(),
+      };
+      
+      console.log('Inserting share data:', shareData);
+
       const { data, error } = await supabase
         .from('document_shares')
-        .insert({
-          document_id: id!,
-          recipient_email: email,
-          share_token: shareToken,
-          expires_at: expiresAt.toISOString(),
-        })
+        .insert(shareData)
         .select()
         .single();
 
-      if (error) throw error;
+      if (error) {
+        console.error('Error creating share:', error);
+        throw error;
+      }
+      
+      console.log('Share created successfully:', data);
       return data;
     },
     onSuccess: (data) => {
@@ -79,7 +101,8 @@ export const DocumentSharePage = () => {
       setRecipientEmail('');
       refetchShares();
     },
-    onError: () => {
+    onError: (error) => {
+      console.error('Create share mutation error:', error);
       toast({
         title: 'Error',
         description: 'Failed to create share link',
@@ -91,12 +114,17 @@ export const DocumentSharePage = () => {
   // Delete share mutation
   const deleteShareMutation = useMutation({
     mutationFn: async (shareId: string) => {
+      console.log('Deleting share:', shareId);
       const { error } = await supabase
         .from('document_shares')
         .delete()
         .eq('id', shareId);
 
-      if (error) throw error;
+      if (error) {
+        console.error('Error deleting share:', error);
+        throw error;
+      }
+      console.log('Share deleted successfully');
     },
     onSuccess: () => {
       toast({
@@ -104,6 +132,14 @@ export const DocumentSharePage = () => {
         description: 'Share link has been removed',
       });
       refetchShares();
+    },
+    onError: (error) => {
+      console.error('Delete share mutation error:', error);
+      toast({
+        title: 'Error',
+        description: 'Failed to remove share link',
+        variant: 'destructive',
+      });
     },
   });
 
@@ -117,6 +153,17 @@ export const DocumentSharePage = () => {
       return;
     }
 
+    // Basic email validation
+    const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+    if (!emailRegex.test(recipientEmail.trim())) {
+      toast({
+        title: 'Invalid Email',
+        description: 'Please enter a valid email address',
+        variant: 'destructive',
+      });
+      return;
+    }
+
     createShareMutation.mutate({
       email: recipientEmail.trim(),
       expiresIn: expiresInDays,
@@ -125,10 +172,17 @@ export const DocumentSharePage = () => {
 
   const copyShareLink = (shareToken: string) => {
     const shareUrl = `${window.location.origin}/shared/${shareToken}`;
-    navigator.clipboard.writeText(shareUrl);
-    toast({
-      title: 'Link Copied',
-      description: 'Share link copied to clipboard',
+    navigator.clipboard.writeText(shareUrl).then(() => {
+      toast({
+        title: 'Link Copied',
+        description: 'Share link copied to clipboard',
+      });
+    }).catch(() => {
+      toast({
+        title: 'Copy Failed',
+        description: 'Failed to copy link to clipboard',
+        variant: 'destructive',
+      });
     });
   };
 

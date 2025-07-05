@@ -42,6 +42,7 @@ export const DocumentViewer = () => {
   const { toast } = useToast();
   const queryClient = useQueryClient();
   const iframeRef = useRef<HTMLIFrameElement>(null);
+  const pdfContainerRef = useRef<HTMLDivElement>(null);
   
   const [signatureFields, setSignatureFields] = useState<SignatureField[]>([]);
   const [newSignerEmail, setNewSignerEmail] = useState('');
@@ -55,7 +56,7 @@ export const DocumentViewer = () => {
   const [pendingFieldPosition, setPendingFieldPosition] = useState<{ x: number; y: number; page: number } | null>(null);
   const [draggingField, setDraggingField] = useState<number | null>(null);
   const [dragOffset, setDragOffset] = useState<{ x: number; y: number }>({ x: 0, y: 0 });
-  const [pdfPageCount, setPdfPageCount] = useState<number>(1);
+  const [currentPage, setCurrentPage] = useState<number>(1);
 
   // Fetch document details
   const { data: document, isLoading } = useQuery({
@@ -129,29 +130,43 @@ export const DocumentViewer = () => {
   // Save signature fields mutation
   const saveFieldsMutation = useMutation({
     mutationFn: async (fields: SignatureField[]) => {
-      await supabase
+      console.log('Saving fields:', fields);
+      
+      // Delete existing fields first
+      const { error: deleteError } = await supabase
         .from('signature_fields')
         .delete()
         .eq('document_id', id);
+      
+      if (deleteError) {
+        console.error('Error deleting existing fields:', deleteError);
+        throw deleteError;
+      }
 
       if (fields.length > 0) {
-        const { error } = await supabase
+        const fieldsToInsert = fields.map(field => ({
+          document_id: id!,
+          signer_email: field.signer_email,
+          x_position: field.x_position,
+          y_position: field.y_position,
+          width: field.width,
+          height: field.height,
+          page_number: field.page_number,
+          field_type: field.field_type,
+          is_required: field.is_required,
+          signature_data: field.signature_data,
+        }));
+        
+        console.log('Inserting fields:', fieldsToInsert);
+        
+        const { error: insertError } = await supabase
           .from('signature_fields')
-          .insert(
-            fields.map(field => ({
-              document_id: id,
-              signer_email: field.signer_email,
-              x_position: field.x_position,
-              y_position: field.y_position,
-              width: field.width,
-              height: field.height,
-              page_number: field.page_number,
-              field_type: field.field_type,
-              is_required: field.is_required,
-              signature_data: field.signature_data,
-            }))
-          );
-        if (error) throw error;
+          .insert(fieldsToInsert);
+          
+        if (insertError) {
+          console.error('Error inserting fields:', insertError);
+          throw insertError;
+        }
       }
     },
     onSuccess: () => {
@@ -161,7 +176,8 @@ export const DocumentViewer = () => {
       });
       queryClient.invalidateQueries({ queryKey: ['signature-fields', id] });
     },
-    onError: () => {
+    onError: (error) => {
+      console.error('Error saving fields:', error);
       toast({
         title: 'Error',
         description: 'Failed to save signature fields.',
@@ -170,49 +186,35 @@ export const DocumentViewer = () => {
     },
   });
 
-  // Function to detect which page was clicked based on scroll position and click coordinates
-  const detectClickedPage = (clickY: number, containerHeight: number, scrollTop: number): number => {
-    // Estimate page height (this is an approximation)
-    const estimatedPageHeight = containerHeight / Math.max(pdfPageCount, 1);
-    const totalScrollOffset = scrollTop + clickY;
-    const pageNumber = Math.floor(totalScrollOffset / estimatedPageHeight) + 1;
-    
-    console.log('Click detection:', { clickY, containerHeight, scrollTop, estimatedPageHeight, totalScrollOffset, pageNumber });
-    
-    // Ensure page number is within valid range
-    return Math.max(1, Math.min(pageNumber, pdfPageCount));
-  };
-
+  // Enhanced click handler with better page detection
   const handlePdfClick = (event: React.MouseEvent<HTMLDivElement>) => {
-    if (!isAddingField || !newSignerEmail.trim()) return;
+    console.log('PDF click detected, isAddingField:', isAddingField, 'newSignerEmail:', newSignerEmail);
+    
+    if (!isAddingField || !newSignerEmail.trim()) {
+      console.log('Not adding field or no signer email');
+      return;
+    }
 
     const rect = event.currentTarget.getBoundingClientRect();
     const clickX = event.clientX - rect.left;
     const clickY = event.clientY - rect.top;
     
-    // Get iframe scroll position if possible
-    let scrollTop = 0;
-    try {
-      if (iframeRef.current && iframeRef.current.contentWindow) {
-        scrollTop = iframeRef.current.contentWindow.pageYOffset || 0;
-      }
-    } catch (e) {
-      console.warn('Cannot access iframe scroll position due to CORS:', e);
-    }
-    
+    // Calculate relative positions
     const x = (clickX / rect.width) * 100;
     const y = (clickY / rect.height) * 100;
-    const detectedPage = detectClickedPage(clickY, rect.height, scrollTop);
+    
+    // For multi-page PDFs, estimate page based on click position
+    // Assume each page takes up roughly equal vertical space
+    const estimatedPage = Math.floor((clickY / rect.height) * 3) + 1; // Assuming up to 3 pages visible
+    const pageNumber = Math.max(1, Math.min(estimatedPage, 10)); // Cap at reasonable page limit
 
-    console.log('PDF clicked at:', { x, y, detectedPage, clickX, clickY, scrollTop });
+    console.log('Click position:', { x, y, clickX, clickY, estimatedPage, pageNumber });
 
     if (selectedFieldType === 'signature') {
-      // For signatures, open the signature capture dialog
-      setPendingSignaturePosition({ x, y, page: detectedPage });
+      setPendingSignaturePosition({ x, y, page: pageNumber });
       setShowSignatureCapture(true);
     } else {
-      // For other field types, open input dialog
-      setPendingFieldPosition({ x, y, page: detectedPage });
+      setPendingFieldPosition({ x, y, page: pageNumber });
       setShowFieldInputDialog(true);
     }
   };
@@ -235,7 +237,7 @@ export const DocumentViewer = () => {
     };
 
     console.log('Adding field:', newField);
-    setSignatureFields([...signatureFields, newField]);
+    setSignatureFields(prev => [...prev, newField]);
     setIsAddingField(false);
   };
 
@@ -244,6 +246,7 @@ export const DocumentViewer = () => {
       addField(pendingSignaturePosition.x, pendingSignaturePosition.y, pendingSignaturePosition.page, signatureData);
       setPendingSignaturePosition(null);
     }
+    setShowSignatureCapture(false);
   };
 
   const handleFieldInputComplete = (value: string) => {
@@ -251,6 +254,7 @@ export const DocumentViewer = () => {
       addField(pendingFieldPosition.x, pendingFieldPosition.y, pendingFieldPosition.page, value);
       setPendingFieldPosition(null);
     }
+    setShowFieldInputDialog(false);
   };
 
   const removeField = (index: number) => {
@@ -258,6 +262,7 @@ export const DocumentViewer = () => {
   };
 
   const saveFields = () => {
+    console.log('Saving fields button clicked, current fields:', signatureFields);
     saveFieldsMutation.mutate(signatureFields);
   };
 
@@ -304,13 +309,11 @@ export const DocumentViewer = () => {
     if (!pdfUrl || !document) return;
 
     try {
-      // Show loading state
       toast({
         title: 'Generating PDF',
         description: 'Please wait while we prepare your document with all the fields...',
       });
 
-      // Generate PDF with fields
       await generatePDFWithFields(
         pdfUrl,
         signatureFields,
@@ -369,16 +372,16 @@ export const DocumentViewer = () => {
             Back
           </Button>
           <div>
-            <h1 className="text-2xl font-bold text-gray-900">{document.title}</h1>
+            <h1 className="text-2xl font-bold text-gray-900">{document?.title}</h1>
             <div className="flex items-center gap-4 mt-1">
               <Badge className={`${
-                document.status === 'completed' ? 'bg-green-100 text-green-800' :
-                document.status === 'pending' ? 'bg-yellow-100 text-yellow-800' :
+                document?.status === 'completed' ? 'bg-green-100 text-green-800' :
+                document?.status === 'pending' ? 'bg-yellow-100 text-yellow-800' :
                 'bg-gray-100 text-gray-800'
               }`}>
-                {document.status.charAt(0).toUpperCase() + document.status.slice(1)}
+                {document?.status?.charAt(0).toUpperCase() + document?.status?.slice(1)}
               </Badge>
-              <span className="text-sm text-gray-600">{document.file_name}</span>
+              <span className="text-sm text-gray-600">{document?.file_name}</span>
             </div>
           </div>
         </div>
@@ -393,7 +396,10 @@ export const DocumentViewer = () => {
           </Button>
           <Button
             variant="outline"
-            onClick={() => navigate(`/dashboard/document/${id}/share`)}
+            onClick={() => {
+              console.log('Share button clicked, navigating to:', `/dashboard/document/${id}/share`);
+              navigate(`/dashboard/document/${id}/share`);
+            }}
           >
             <Share2 className="h-4 w-4 mr-2" />
             Share
@@ -444,6 +450,17 @@ export const DocumentViewer = () => {
                   </SelectContent>
                 </Select>
               </div>
+
+              <div className="space-y-2">
+                <label className="text-sm font-medium">Target Page</label>
+                <Input
+                  type="number"
+                  min="1"
+                  placeholder="Page number"
+                  value={currentPage}
+                  onChange={(e) => setCurrentPage(parseInt(e.target.value) || 1)}
+                />
+              </div>
               
               <Button
                 onClick={() => {
@@ -451,7 +468,7 @@ export const DocumentViewer = () => {
                     setIsAddingField(true);
                     toast({
                       title: 'Click on PDF',
-                      description: `Click on any page where you want to place the ${getFieldDisplayInfo(selectedFieldType).label.toLowerCase()}.`,
+                      description: `Click anywhere on the PDF to place the ${getFieldDisplayInfo(selectedFieldType).label.toLowerCase()} on page ${currentPage}.`,
                     });
                   } else {
                     toast({
@@ -543,6 +560,7 @@ export const DocumentViewer = () => {
                 ) : pdfUrl ? (
                   <div className="relative">
                     <div 
+                      ref={pdfContainerRef}
                       className="relative"
                       onMouseMove={handleMouseMove}
                       onMouseUp={handleMouseUp}
@@ -557,32 +575,19 @@ export const DocumentViewer = () => {
                         onError={() => setPdfError('Failed to load PDF file')}
                         style={{ 
                           minHeight: '100%',
-                          overflow: 'auto'
                         }}
                         allow="fullscreen"
                         loading="lazy"
                       />
                       
-                      {/* Transparent overlay to capture clicks */}
+                      {/* Click overlay for adding fields */}
                       <div 
-                        className={`absolute inset-0 w-full h-full ${isAddingField ? 'cursor-crosshair' : draggingField !== null ? 'cursor-grabbing' : 'cursor-default'}`}
+                        className={`absolute inset-0 w-full h-full ${isAddingField ? 'cursor-crosshair bg-blue-50 bg-opacity-10' : 'pointer-events-none'}`}
                         onClick={handlePdfClick}
                         style={{ 
-                          pointerEvents: draggingField !== null ? 'none' : isAddingField ? 'auto' : 'none',
                           zIndex: isAddingField ? 10 : 1
                         }}
                       />
-                      
-                      <div className="absolute top-2 right-2 z-20">
-                        <a
-                          href={pdfUrl}
-                          target="_blank"
-                          rel="noopener noreferrer"
-                          className="bg-blue-600 text-white px-3 py-1 rounded text-sm hover:bg-blue-700 shadow-lg"
-                        >
-                          Open in new tab
-                        </a>
-                      </div>
                       
                       {/* Signature Field Overlays */}
                       {signatureFields.map((field, index) => {
@@ -671,3 +676,15 @@ export const DocumentViewer = () => {
     </div>
   );
 };
+
+function getFieldDisplayInfo(fieldType: string) {
+  const fieldTypes = [
+    { value: 'signature', label: 'Signature', icon: PenTool, color: 'bg-blue-500' },
+    { value: 'initials', label: 'Initials', icon: Type, color: 'bg-green-500' },
+    { value: 'name', label: 'Full Name', icon: User, color: 'bg-purple-500' },
+    { value: 'date', label: 'Date', icon: Calendar, color: 'bg-orange-500' },
+    { value: 'text', label: 'Text Field', icon: FileText, color: 'bg-gray-500' },
+    { value: 'company', label: 'Company', icon: Building, color: 'bg-indigo-500' },
+  ];
+  return fieldTypes.find(f => f.value === fieldType) || fieldTypes[0];
+}
