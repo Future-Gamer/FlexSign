@@ -9,6 +9,7 @@ import Index from "./pages/Index";
 import Dashboard from "./pages/Dashboard";
 import Upload from "./pages/Upload";
 import DocumentView from "./pages/DocumentView";
+import DocumentShare from "./pages/DocumentShare";
 import PDFTools from "./pages/PDFTools";
 import NotFound from "./pages/NotFound";
 
@@ -62,6 +63,14 @@ const App = () => (
               element={
                 <ProtectedRoute>
                   <DocumentView />
+                </ProtectedRoute>
+              } 
+            />
+            <Route 
+              path="/dashboard/document/:id/share" 
+              element={
+                <ProtectedRoute>
+                  <DocumentShare />
                 </ProtectedRoute>
               } 
             />
