@@ -57,6 +57,7 @@ export const DocumentViewer = () => {
   const [draggingField, setDraggingField] = useState<number | null>(null);
   const [dragOffset, setDragOffset] = useState<{ x: number; y: number }>({ x: 0, y: 0 });
   const [currentPage, setCurrentPage] = useState<number>(1);
+  const [pdfMetadata, setPdfMetadata] = useState<{ pageHeight: number; totalPages: number }>({ pageHeight: 842, totalPages: 1 });
 
   // Fetch document details
   const { data: document, isLoading } = useQuery({
@@ -127,6 +128,31 @@ export const DocumentViewer = () => {
     }
   }, [existingFields]);
 
+  // Listen for PDF load and get metadata
+  useEffect(() => {
+    if (pdfUrl && iframeRef.current) {
+      const iframe = iframeRef.current;
+      
+      const handleIframeLoad = () => {
+        try {
+          // Estimate PDF metadata based on typical PDF page dimensions
+          // Standard PDF page is 595x842 points (A4 at 72 DPI)
+          setPdfMetadata({
+            pageHeight: 842, // Standard A4 height in points
+            totalPages: 10 // Default estimate, will be updated if we can get actual data
+          });
+          
+          console.log('PDF loaded, estimated metadata:', { pageHeight: 842, totalPages: 10 });
+        } catch (error) {
+          console.log('Could not access PDF metadata, using defaults');
+        }
+      };
+      
+      iframe.addEventListener('load', handleIframeLoad);
+      return () => iframe.removeEventListener('load', handleIframeLoad);
+    }
+  }, [pdfUrl]);
+
   // Save signature fields mutation
   const saveFieldsMutation = useMutation({
     mutationFn: async (fields: SignatureField[]) => {
@@ -186,7 +212,7 @@ export const DocumentViewer = () => {
     },
   });
 
-  // Enhanced click handler with better page detection
+  // Enhanced click handler with proper page-based positioning
   const handlePdfClick = (event: React.MouseEvent<HTMLDivElement>) => {
     console.log('PDF click detected, isAddingField:', isAddingField, 'newSignerEmail:', newSignerEmail);
     
@@ -199,22 +225,18 @@ export const DocumentViewer = () => {
     const clickX = event.clientX - rect.left;
     const clickY = event.clientY - rect.top;
     
-    // Calculate relative positions
+    // Calculate position as percentage of the container
     const x = (clickX / rect.width) * 100;
     const y = (clickY / rect.height) * 100;
     
-    // For multi-page PDFs, estimate page based on click position
-    // Assume each page takes up roughly equal vertical space
-    const estimatedPage = Math.floor((clickY / rect.height) * 3) + 1; // Assuming up to 3 pages visible
-    const pageNumber = Math.max(1, Math.min(estimatedPage, 10)); // Cap at reasonable page limit
-
-    console.log('Click position:', { x, y, clickX, clickY, estimatedPage, pageNumber });
+    console.log('Click position:', { x, y, clickX, clickY, containerWidth: rect.width, containerHeight: rect.height });
+    console.log('Target page:', currentPage);
 
     if (selectedFieldType === 'signature') {
-      setPendingSignaturePosition({ x, y, page: pageNumber });
+      setPendingSignaturePosition({ x, y, page: currentPage });
       setShowSignatureCapture(true);
     } else {
-      setPendingFieldPosition({ x, y, page: pageNumber });
+      setPendingFieldPosition({ x, y, page: currentPage });
       setShowFieldInputDialog(true);
     }
   };
@@ -303,6 +325,21 @@ export const DocumentViewer = () => {
 
   const handleMouseUp = () => {
     setDraggingField(null);
+  };
+
+  // Calculate field position based on page
+  const calculateFieldPosition = (field: SignatureField) => {
+    // Each page takes up roughly equal vertical space in the PDF viewer
+    // Position the field relative to its target page
+    const pageOffsetPercentage = ((field.page_number - 1) * pdfMetadata.pageHeight) / (pdfMetadata.totalPages * pdfMetadata.pageHeight) * 100;
+    const adjustedY = pageOffsetPercentage + (field.y_position / pdfMetadata.totalPages);
+    
+    return {
+      left: `${field.x_position}%`,
+      top: `${adjustedY}%`,
+      width: `${Math.max(60, (field.width / 800) * 100)}px`,
+      height: `${Math.max(25, (field.height / 600) * 100)}px`,
+    };
   };
 
   const downloadDocument = async () => {
@@ -589,23 +626,17 @@ export const DocumentViewer = () => {
                         }}
                       />
                       
-                      {/* Signature Field Overlays */}
+                      {/* Signature Field Overlays with improved positioning */}
                       {signatureFields.map((field, index) => {
                         const fieldInfo = getFieldDisplayInfo(field.field_type);
                         const FieldIcon = fieldInfo.icon;
+                        const fieldStyle = calculateFieldPosition(field);
                         
                         return (
                           <div
                             key={index}
                             className={`absolute border-2 ${fieldInfo.color.replace('bg-', 'border-')} bg-opacity-20 ${fieldInfo.color} flex items-center justify-center text-xs font-medium text-white shadow-sm cursor-grab hover:shadow-lg transition-shadow ${draggingField === index ? 'cursor-grabbing z-50' : 'z-30'}`}
-                            style={{
-                              left: `${field.x_position}%`,
-                              top: `${field.y_position}%`,
-                              width: `${(field.width / 800) * 100}%`,
-                              height: `${(field.height / 600) * 100}%`,
-                              minWidth: '60px',
-                              minHeight: '25px',
-                            }}
+                            style={fieldStyle}
                             onMouseDown={(e) => handleFieldMouseDown(e, index)}
                             title={`Page ${field.page_number} - ${fieldInfo.label} for ${field.signer_email}`}
                           >
