@@ -43,7 +43,6 @@ export const DocumentViewer = () => {
   const queryClient = useQueryClient();
   const iframeRef = useRef<HTMLIFrameElement>(null);
   const pdfContainerRef = useRef<HTMLDivElement>(null);
-  const overlayRef = useRef<HTMLDivElement>(null);
   
   const [signatureFields, setSignatureFields] = useState<SignatureField[]>([]);
   const [newSignerEmail, setNewSignerEmail] = useState('');
@@ -58,12 +57,7 @@ export const DocumentViewer = () => {
   const [draggingField, setDraggingField] = useState<number | null>(null);
   const [dragOffset, setDragOffset] = useState<{ x: number; y: number }>({ x: 0, y: 0 });
   const [currentPage, setCurrentPage] = useState<number>(1);
-  const [pdfMetadata, setPdfMetadata] = useState<{ pageHeight: number; totalPages: number; actualTotalPages: number }>({ 
-    pageHeight: 842, 
-    totalPages: 1, 
-    actualTotalPages: 1 
-  });
-  const [containerDimensions, setContainerDimensions] = useState<{ width: number; height: number }>({ width: 800, height: 600 });
+  const [pdfMetadata, setPdfMetadata] = useState<{ pageHeight: number; totalPages: number }>({ pageHeight: 842, totalPages: 1 });
 
   // Fetch document details
   const { data: document, isLoading } = useQuery({
@@ -134,62 +128,30 @@ export const DocumentViewer = () => {
     }
   }, [existingFields]);
 
-  // Enhanced PDF metadata detection with container size tracking
+  // Listen for PDF load and get metadata
   useEffect(() => {
-    if (pdfUrl && pdfContainerRef.current) {
-      const container = pdfContainerRef.current;
-      
-      const updateContainerDimensions = () => {
-        const rect = container.getBoundingClientRect();
-        setContainerDimensions({ width: rect.width, height: rect.height });
-      };
+    if (pdfUrl && iframeRef.current) {
+      const iframe = iframeRef.current;
       
       const handleIframeLoad = () => {
         try {
-          updateContainerDimensions();
-          
-          // Estimate pages based on file size
-          let estimatedPages = 10;
-          if (document?.file_size) {
-            const averagePageSize = 50 * 1024; // 50KB
-            estimatedPages = Math.max(1, Math.min(100, Math.ceil(document.file_size / averagePageSize)));
-          }
-          
+          // Estimate PDF metadata based on typical PDF page dimensions
+          // Standard PDF page is 595x842 points (A4 at 72 DPI)
           setPdfMetadata({
-            pageHeight: 842,
-            totalPages: estimatedPages,
-            actualTotalPages: estimatedPages
+            pageHeight: 842, // Standard A4 height in points
+            totalPages: 10 // Default estimate, will be updated if we can get actual data
           });
           
-          console.log('PDF loaded, estimated metadata:', { 
-            pageHeight: 842, 
-            totalPages: estimatedPages,
-            containerDimensions: containerDimensions
-          });
+          console.log('PDF loaded, estimated metadata:', { pageHeight: 842, totalPages: 10 });
         } catch (error) {
           console.log('Could not access PDF metadata, using defaults');
-          setPdfMetadata({
-            pageHeight: 842,
-            totalPages: 10,
-            actualTotalPages: 10
-          });
         }
       };
       
-      const iframe = iframeRef.current;
-      if (iframe) {
-        iframe.addEventListener('load', handleIframeLoad);
-        
-        // Also update dimensions on window resize
-        window.addEventListener('resize', updateContainerDimensions);
-        
-        return () => {
-          iframe.removeEventListener('load', handleIframeLoad);
-          window.removeEventListener('resize', updateContainerDimensions);
-        };
-      }
+      iframe.addEventListener('load', handleIframeLoad);
+      return () => iframe.removeEventListener('load', handleIframeLoad);
     }
-  }, [pdfUrl, document?.file_size]);
+  }, [pdfUrl]);
 
   // Save signature fields mutation
   const saveFieldsMutation = useMutation({
@@ -250,7 +212,7 @@ export const DocumentViewer = () => {
     },
   });
 
-  // Enhanced click handler with better positioning
+  // Enhanced click handler with proper page-based positioning
   const handlePdfClick = (event: React.MouseEvent<HTMLDivElement>) => {
     console.log('PDF click detected, isAddingField:', isAddingField, 'newSignerEmail:', newSignerEmail);
     
@@ -263,7 +225,7 @@ export const DocumentViewer = () => {
     const clickX = event.clientX - rect.left;
     const clickY = event.clientY - rect.top;
     
-    // Calculate position as percentage
+    // Calculate position as percentage of the container
     const x = (clickX / rect.width) * 100;
     const y = (clickY / rect.height) * 100;
     
@@ -334,25 +296,28 @@ export const DocumentViewer = () => {
     e.preventDefault();
     e.stopPropagation();
     const rect = e.currentTarget.getBoundingClientRect();
-    setDragOffset({
-      x: e.clientX - rect.left,
-      y: e.clientY - rect.top,
-    });
-    setDraggingField(index);
+    const parentRect = e.currentTarget.parentElement?.getBoundingClientRect();
+    if (parentRect) {
+      setDragOffset({
+        x: e.clientX - rect.left,
+        y: e.clientY - rect.top,
+      });
+      setDraggingField(index);
+    }
   };
 
   const handleMouseMove = (e: React.MouseEvent<HTMLDivElement>) => {
-    if (draggingField !== null && overlayRef.current) {
+    if (draggingField !== null) {
       e.preventDefault();
-      const rect = overlayRef.current.getBoundingClientRect();
+      const rect = e.currentTarget.getBoundingClientRect();
       const x = ((e.clientX - rect.left - dragOffset.x) / rect.width) * 100;
       const y = ((e.clientY - rect.top - dragOffset.y) / rect.height) * 100;
       
       const updatedFields = [...signatureFields];
       updatedFields[draggingField] = {
         ...updatedFields[draggingField],
-        x_position: Math.max(0, Math.min(95, x)),
-        y_position: Math.max(0, Math.min(95, y)),
+        x_position: Math.max(0, Math.min(100 - (updatedFields[draggingField].width / 8), x)),
+        y_position: Math.max(0, Math.min(100 - (updatedFields[draggingField].height / 6), y)),
       };
       setSignatureFields(updatedFields);
     }
@@ -362,13 +327,18 @@ export const DocumentViewer = () => {
     setDraggingField(null);
   };
 
-  // Simplified field positioning - direct percentage positioning
+  // Calculate field position based on page
   const calculateFieldPosition = (field: SignatureField) => {
+    // Each page takes up roughly equal vertical space in the PDF viewer
+    // Position the field relative to its target page
+    const pageOffsetPercentage = ((field.page_number - 1) * pdfMetadata.pageHeight) / (pdfMetadata.totalPages * pdfMetadata.pageHeight) * 100;
+    const adjustedY = pageOffsetPercentage + (field.y_position / pdfMetadata.totalPages);
+    
     return {
       left: `${field.x_position}%`,
-      top: `${field.y_position}%`,
-      width: `${Math.max(60, field.width / 8)}px`,
-      height: `${Math.max(25, field.height / 2)}px`,
+      top: `${adjustedY}%`,
+      width: `${Math.max(60, (field.width / 800) * 100)}px`,
+      height: `${Math.max(25, (field.height / 600) * 100)}px`,
     };
   };
 
@@ -523,18 +493,10 @@ export const DocumentViewer = () => {
                 <Input
                   type="number"
                   min="1"
-                  max={pdfMetadata.actualTotalPages}
-                  placeholder={`Page (1-${pdfMetadata.actualTotalPages})`}
+                  placeholder="Page number"
                   value={currentPage}
-                  onChange={(e) => {
-                    const pageNum = parseInt(e.target.value) || 1;
-                    const validatedPage = Math.max(1, Math.min(pdfMetadata.actualTotalPages, pageNum));
-                    setCurrentPage(validatedPage);
-                  }}
+                  onChange={(e) => setCurrentPage(parseInt(e.target.value) || 1)}
                 />
-                <p className="text-xs text-gray-500">
-                  Document has {pdfMetadata.actualTotalPages} page{pdfMetadata.actualTotalPages !== 1 ? 's' : ''}
-                </p>
               </div>
               
               <Button
@@ -636,17 +598,19 @@ export const DocumentViewer = () => {
                   <div className="relative">
                     <div 
                       ref={pdfContainerRef}
-                      className="relative overflow-auto"
+                      className="relative"
+                      onMouseMove={handleMouseMove}
+                      onMouseUp={handleMouseUp}
+                      onMouseLeave={handleMouseUp}
                       style={{ height: '90vh' }}
                     >
                       <iframe
                         ref={iframeRef}
                         src={`${pdfUrl}#toolbar=1&navpanes=1&scrollbar=1&view=FitV&zoom=page-fit`}
-                        className="w-full border-0 rounded-lg"
+                        className="w-full h-full border-0 rounded-lg"
                         title="PDF Viewer"
                         onError={() => setPdfError('Failed to load PDF file')}
                         style={{ 
-                          height: '100%',
                           minHeight: '100%',
                         }}
                         allow="fullscreen"
@@ -655,12 +619,11 @@ export const DocumentViewer = () => {
                       
                       {/* Click overlay for adding fields */}
                       <div 
-                        ref={overlayRef}
-                        className={`absolute inset-0 w-full h-full ${isAddingField ? 'cursor-crosshair bg-blue-50 bg-opacity-10 z-20' : 'pointer-events-none z-10'}`}
+                        className={`absolute inset-0 w-full h-full ${isAddingField ? 'cursor-crosshair bg-blue-50 bg-opacity-10' : 'pointer-events-none'}`}
                         onClick={handlePdfClick}
-                        onMouseMove={handleMouseMove}
-                        onMouseUp={handleMouseUp}
-                        onMouseLeave={handleMouseUp}
+                        style={{ 
+                          zIndex: isAddingField ? 10 : 1
+                        }}
                       />
                       
                       {/* Signature Field Overlays with improved positioning */}
@@ -672,11 +635,8 @@ export const DocumentViewer = () => {
                         return (
                           <div
                             key={index}
-                            className={`absolute border-2 ${fieldInfo.color.replace('bg-', 'border-')} bg-opacity-30 ${fieldInfo.color} flex items-center justify-center text-xs font-medium text-white shadow-lg cursor-grab hover:shadow-xl transition-all ${draggingField === index ? 'cursor-grabbing z-50 scale-105' : 'z-30'}`}
-                            style={{
-                              ...fieldStyle,
-                              pointerEvents: 'auto',
-                            }}
+                            className={`absolute border-2 ${fieldInfo.color.replace('bg-', 'border-')} bg-opacity-20 ${fieldInfo.color} flex items-center justify-center text-xs font-medium text-white shadow-sm cursor-grab hover:shadow-lg transition-shadow ${draggingField === index ? 'cursor-grabbing z-50' : 'z-30'}`}
+                            style={fieldStyle}
                             onMouseDown={(e) => handleFieldMouseDown(e, index)}
                             title={`Page ${field.page_number} - ${fieldInfo.label} for ${field.signer_email}`}
                           >
@@ -685,16 +645,16 @@ export const DocumentViewer = () => {
                                 <img 
                                   src={field.signature_data} 
                                   alt="Signature" 
-                                  className="w-full h-full object-contain rounded"
+                                  className="w-full h-full object-contain"
                                   style={{ pointerEvents: 'none' }}
                                 />
                               ) : (
-                                <div className="w-full h-full flex items-center justify-center text-black bg-white bg-opacity-90 rounded text-xs font-medium px-1" style={{ pointerEvents: 'none' }}>
+                                <div className="w-full h-full flex items-center justify-center text-black bg-white bg-opacity-90 rounded text-xs font-medium" style={{ pointerEvents: 'none' }}>
                                   {field.signature_data}
                                 </div>
                               )
                             ) : (
-                              <div className="flex items-center gap-1 pointer-events-none px-2">
+                              <div className="flex items-center gap-1 pointer-events-none">
                                 <FieldIcon className="h-3 w-3" />
                                 <span className="truncate text-xs">
                                   P{field.page_number} {field.field_type === 'signature' ? 'Sign' :
