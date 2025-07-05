@@ -63,7 +63,7 @@ export const DocumentViewer = () => {
     totalPages: 1, 
     actualTotalPages: 1 
   });
-  const [scrollPosition, setScrollPosition] = useState<number>(0);
+  const [containerDimensions, setContainerDimensions] = useState<{ width: number; height: number }>({ width: 800, height: 600 });
 
   // Fetch document details
   const { data: document, isLoading } = useQuery({
@@ -134,29 +134,29 @@ export const DocumentViewer = () => {
     }
   }, [existingFields]);
 
-  // Enhanced PDF metadata detection with better page counting
+  // Enhanced PDF metadata detection with container size tracking
   useEffect(() => {
-    if (pdfUrl && iframeRef.current) {
-      const iframe = iframeRef.current;
+    if (pdfUrl && pdfContainerRef.current) {
+      const container = pdfContainerRef.current;
+      
+      const updateContainerDimensions = () => {
+        const rect = container.getBoundingClientRect();
+        setContainerDimensions({ width: rect.width, height: rect.height });
+      };
       
       const handleIframeLoad = () => {
         try {
-          // Try to access PDF metadata through iframe
-          const iframeDoc = iframe.contentDocument || iframe.contentWindow?.document;
+          updateContainerDimensions();
           
-          // Estimate based on common PDF patterns
-          // Most business documents are 1-50 pages, with common sizes being 1, 2, 5, 10, 20 pages
-          let estimatedPages = 10; // Default conservative estimate
-          
-          // Try to get more accurate page count by analyzing the PDF URL or file size
+          // Estimate pages based on file size
+          let estimatedPages = 10;
           if (document?.file_size) {
-            // Rough estimation: 50KB per page for typical business documents
             const averagePageSize = 50 * 1024; // 50KB
             estimatedPages = Math.max(1, Math.min(100, Math.ceil(document.file_size / averagePageSize)));
           }
           
           setPdfMetadata({
-            pageHeight: 842, // Standard A4 height in points
+            pageHeight: 842,
             totalPages: estimatedPages,
             actualTotalPages: estimatedPages
           });
@@ -164,7 +164,7 @@ export const DocumentViewer = () => {
           console.log('PDF loaded, estimated metadata:', { 
             pageHeight: 842, 
             totalPages: estimatedPages,
-            fileSize: document?.file_size 
+            containerDimensions: containerDimensions
           });
         } catch (error) {
           console.log('Could not access PDF metadata, using defaults');
@@ -176,26 +176,20 @@ export const DocumentViewer = () => {
         }
       };
       
-      iframe.addEventListener('load', handleIframeLoad);
-      return () => iframe.removeEventListener('load', handleIframeLoad);
+      const iframe = iframeRef.current;
+      if (iframe) {
+        iframe.addEventListener('load', handleIframeLoad);
+        
+        // Also update dimensions on window resize
+        window.addEventListener('resize', updateContainerDimensions);
+        
+        return () => {
+          iframe.removeEventListener('load', handleIframeLoad);
+          window.removeEventListener('resize', updateContainerDimensions);
+        };
+      }
     }
   }, [pdfUrl, document?.file_size]);
-
-  // Track scroll position to adjust field positions
-  useEffect(() => {
-    const handleScroll = () => {
-      if (pdfContainerRef.current) {
-        const scrollTop = pdfContainerRef.current.scrollTop;
-        setScrollPosition(scrollTop);
-      }
-    };
-
-    const container = pdfContainerRef.current;
-    if (container) {
-      container.addEventListener('scroll', handleScroll);
-      return () => container.removeEventListener('scroll', handleScroll);
-    }
-  }, []);
 
   // Save signature fields mutation
   const saveFieldsMutation = useMutation({
@@ -256,7 +250,7 @@ export const DocumentViewer = () => {
     },
   });
 
-  // Enhanced click handler with proper page-based positioning
+  // Enhanced click handler with better positioning
   const handlePdfClick = (event: React.MouseEvent<HTMLDivElement>) => {
     console.log('PDF click detected, isAddingField:', isAddingField, 'newSignerEmail:', newSignerEmail);
     
@@ -269,22 +263,11 @@ export const DocumentViewer = () => {
     const clickX = event.clientX - rect.left;
     const clickY = event.clientY - rect.top;
     
-    // Account for scroll position to get the true position within the PDF
-    const adjustedClickY = clickY + scrollPosition;
-    
-    // Calculate position as percentage of the container
+    // Calculate position as percentage
     const x = (clickX / rect.width) * 100;
-    const y = (adjustedClickY / rect.height) * 100;
+    const y = (clickY / rect.height) * 100;
     
-    console.log('Click position:', { 
-      x, 
-      y, 
-      clickX, 
-      clickY: adjustedClickY, 
-      containerWidth: rect.width, 
-      containerHeight: rect.height,
-      scrollPosition 
-    });
+    console.log('Click position:', { x, y, clickX, clickY, containerWidth: rect.width, containerHeight: rect.height });
     console.log('Target page:', currentPage);
 
     if (selectedFieldType === 'signature') {
@@ -351,29 +334,25 @@ export const DocumentViewer = () => {
     e.preventDefault();
     e.stopPropagation();
     const rect = e.currentTarget.getBoundingClientRect();
-    const parentRect = e.currentTarget.parentElement?.getBoundingClientRect();
-    if (parentRect) {
-      setDragOffset({
-        x: e.clientX - rect.left,
-        y: e.clientY - rect.top,
-      });
-      setDraggingField(index);
-    }
+    setDragOffset({
+      x: e.clientX - rect.left,
+      y: e.clientY - rect.top,
+    });
+    setDraggingField(index);
   };
 
   const handleMouseMove = (e: React.MouseEvent<HTMLDivElement>) => {
-    if (draggingField !== null) {
+    if (draggingField !== null && overlayRef.current) {
       e.preventDefault();
-      const rect = e.currentTarget.getBoundingClientRect();
-      const adjustedY = (e.clientY - rect.top + scrollPosition - dragOffset.y);
+      const rect = overlayRef.current.getBoundingClientRect();
       const x = ((e.clientX - rect.left - dragOffset.x) / rect.width) * 100;
-      const y = (adjustedY / rect.height) * 100;
+      const y = ((e.clientY - rect.top - dragOffset.y) / rect.height) * 100;
       
       const updatedFields = [...signatureFields];
       updatedFields[draggingField] = {
         ...updatedFields[draggingField],
-        x_position: Math.max(0, Math.min(100 - (updatedFields[draggingField].width / 8), x)),
-        y_position: Math.max(0, Math.min(100 - (updatedFields[draggingField].height / 6), y)),
+        x_position: Math.max(0, Math.min(95, x)),
+        y_position: Math.max(0, Math.min(95, y)),
       };
       setSignatureFields(updatedFields);
     }
@@ -383,22 +362,13 @@ export const DocumentViewer = () => {
     setDraggingField(null);
   };
 
-  // Calculate field position based on page - this ensures fields move with PDF content
+  // Simplified field positioning - direct percentage positioning
   const calculateFieldPosition = (field: SignatureField) => {
-    // Calculate the absolute position within the entire PDF document
-    // Each page has a standard height, and we position relative to the document start
-    const documentHeight = pdfMetadata.totalPages * pdfMetadata.pageHeight;
-    const pageStartY = (field.page_number - 1) * pdfMetadata.pageHeight;
-    
-    // Convert field's relative position within its page to absolute position in document
-    const absoluteY = pageStartY + (field.y_position / 100) * pdfMetadata.pageHeight;
-    const relativeY = (absoluteY / documentHeight) * 100;
-    
     return {
       left: `${field.x_position}%`,
-      top: `${relativeY}%`,
-      width: `${Math.max(60, (field.width / 800) * 100)}px`,
-      height: `${Math.max(25, (field.height / 600) * 100)}px`,
+      top: `${field.y_position}%`,
+      width: `${Math.max(60, field.width / 8)}px`,
+      height: `${Math.max(25, field.height / 2)}px`,
     };
   };
 
@@ -667,9 +637,6 @@ export const DocumentViewer = () => {
                     <div 
                       ref={pdfContainerRef}
                       className="relative overflow-auto"
-                      onMouseMove={handleMouseMove}
-                      onMouseUp={handleMouseUp}
-                      onMouseLeave={handleMouseUp}
                       style={{ height: '90vh' }}
                     >
                       <iframe
@@ -679,7 +646,7 @@ export const DocumentViewer = () => {
                         title="PDF Viewer"
                         onError={() => setPdfError('Failed to load PDF file')}
                         style={{ 
-                          height: `${pdfMetadata.totalPages * 100}%`,
+                          height: '100%',
                           minHeight: '100%',
                         }}
                         allow="fullscreen"
@@ -689,12 +656,11 @@ export const DocumentViewer = () => {
                       {/* Click overlay for adding fields */}
                       <div 
                         ref={overlayRef}
-                        className={`absolute inset-0 w-full ${isAddingField ? 'cursor-crosshair bg-blue-50 bg-opacity-10' : 'pointer-events-none'}`}
+                        className={`absolute inset-0 w-full h-full ${isAddingField ? 'cursor-crosshair bg-blue-50 bg-opacity-10 z-20' : 'pointer-events-none z-10'}`}
                         onClick={handlePdfClick}
-                        style={{ 
-                          height: `${pdfMetadata.totalPages * 100}%`,
-                          zIndex: isAddingField ? 10 : 1
-                        }}
+                        onMouseMove={handleMouseMove}
+                        onMouseUp={handleMouseUp}
+                        onMouseLeave={handleMouseUp}
                       />
                       
                       {/* Signature Field Overlays with improved positioning */}
@@ -706,8 +672,11 @@ export const DocumentViewer = () => {
                         return (
                           <div
                             key={index}
-                            className={`absolute border-2 ${fieldInfo.color.replace('bg-', 'border-')} bg-opacity-20 ${fieldInfo.color} flex items-center justify-center text-xs font-medium text-white shadow-sm cursor-grab hover:shadow-lg transition-shadow ${draggingField === index ? 'cursor-grabbing z-50' : 'z-30'}`}
-                            style={fieldStyle}
+                            className={`absolute border-2 ${fieldInfo.color.replace('bg-', 'border-')} bg-opacity-30 ${fieldInfo.color} flex items-center justify-center text-xs font-medium text-white shadow-lg cursor-grab hover:shadow-xl transition-all ${draggingField === index ? 'cursor-grabbing z-50 scale-105' : 'z-30'}`}
+                            style={{
+                              ...fieldStyle,
+                              pointerEvents: 'auto',
+                            }}
                             onMouseDown={(e) => handleFieldMouseDown(e, index)}
                             title={`Page ${field.page_number} - ${fieldInfo.label} for ${field.signer_email}`}
                           >
@@ -716,16 +685,16 @@ export const DocumentViewer = () => {
                                 <img 
                                   src={field.signature_data} 
                                   alt="Signature" 
-                                  className="w-full h-full object-contain"
+                                  className="w-full h-full object-contain rounded"
                                   style={{ pointerEvents: 'none' }}
                                 />
                               ) : (
-                                <div className="w-full h-full flex items-center justify-center text-black bg-white bg-opacity-90 rounded text-xs font-medium" style={{ pointerEvents: 'none' }}>
+                                <div className="w-full h-full flex items-center justify-center text-black bg-white bg-opacity-90 rounded text-xs font-medium px-1" style={{ pointerEvents: 'none' }}>
                                   {field.signature_data}
                                 </div>
                               )
                             ) : (
-                              <div className="flex items-center gap-1 pointer-events-none">
+                              <div className="flex items-center gap-1 pointer-events-none px-2">
                                 <FieldIcon className="h-3 w-3" />
                                 <span className="truncate text-xs">
                                   P{field.page_number} {field.field_type === 'signature' ? 'Sign' :
