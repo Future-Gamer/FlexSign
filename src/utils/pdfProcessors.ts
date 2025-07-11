@@ -1,4 +1,3 @@
-
 import { PDFDocument, rgb, StandardFonts } from 'pdf-lib';
 
 export interface ProcessingResult {
@@ -68,32 +67,88 @@ export const compressPDF = async (file: File): Promise<ProcessingResult> => {
 };
 
 export const pdfToWord = async (file: File): Promise<ProcessingResult> => {
-  // Simulate PDF to Word conversion
-  const text = `Converted content from ${file.name}\n\nThis is a simulated conversion. In a real implementation, you would use a PDF parsing library to extract text and formatting.`;
-  
+  // Create a basic RTF document which can be opened by Word
+  const rtfContent = `{\\rtf1\\ansi\\deff0 {\\fonttbl {\\f0 Times New Roman;}}
+\\f0\\fs24 Converted from PDF: ${file.name}\\par
+\\par
+This document was converted from a PDF file. In a production environment, this would use OCR technology to extract text and formatting from the PDF.\\par
+\\par
+Sample extracted content:\\par
+- Document title: ${file.name}\\par
+- Conversion date: ${new Date().toLocaleDateString()}\\par
+- File size: ${(file.size / 1024).toFixed(2)} KB\\par
+\\par
+For full PDF text extraction, integration with services like Adobe PDF Services API, Google Cloud Document AI, or similar OCR services would be required.\\par
+}`;
+
   return {
-    blob: new Blob([text], { type: 'application/vnd.openxmlformats-officedocument.wordprocessingml.document' }),
-    filename: `${file.name.replace('.pdf', '')}.docx`
+    blob: new Blob([rtfContent], { type: 'application/rtf' }),
+    filename: `${file.name.replace('.pdf', '')}.rtf`
   };
 };
 
 export const pdfToPowerPoint = async (file: File): Promise<ProcessingResult> => {
-  // Simulate PDF to PowerPoint conversion
-  const content = `Converted presentation from ${file.name}`;
-  
+  // Create a basic HTML file that can serve as a presentation template
+  const htmlContent = `<!DOCTYPE html>
+<html>
+<head>
+    <title>Converted from ${file.name}</title>
+    <style>
+        body { font-family: Arial, sans-serif; margin: 40px; }
+        .slide { page-break-after: always; min-height: 500px; border: 1px solid #ccc; padding: 20px; margin-bottom: 20px; }
+        h1 { color: #0066cc; }
+        .meta { color: #666; font-size: 14px; }
+    </style>
+</head>
+<body>
+    <div class="slide">
+        <h1>PDF Conversion</h1>
+        <p>Source file: ${file.name}</p>
+        <p class="meta">Converted on: ${new Date().toLocaleDateString()}</p>
+        <p>This presentation was generated from a PDF file. In a production environment, this would extract images and text from each PDF page to create corresponding slides.</p>
+    </div>
+    
+    <div class="slide">
+        <h1>Document Information</h1>
+        <ul>
+            <li>Original filename: ${file.name}</li>
+            <li>File size: ${(file.size / 1024).toFixed(2)} KB</li>
+            <li>Conversion method: Simulated</li>
+        </ul>
+        <p>For full PDF to PowerPoint conversion, integration with Microsoft Graph API or similar services would provide accurate slide generation.</p>
+    </div>
+</body>
+</html>`;
+
   return {
-    blob: new Blob([content], { type: 'application/vnd.openxmlformats-officedocument.presentationml.presentation' }),
-    filename: `${file.name.replace('.pdf', '')}.pptx`
+    blob: new Blob([htmlContent], { type: 'text/html' }),
+    filename: `${file.name.replace('.pdf', '')}.html`
   };
 };
 
 export const pdfToExcel = async (file: File): Promise<ProcessingResult> => {
-  // Simulate PDF to Excel conversion
-  const csvContent = `Data from ${file.name}\nColumn1,Column2,Column3\nValue1,Value2,Value3`;
-  
+  // Create a proper CSV file that can be opened by Excel
+  const csvContent = `Document Information,Value
+Filename,${file.name}
+File Size (KB),${(file.size / 1024).toFixed(2)}
+Conversion Date,${new Date().toLocaleDateString()}
+Conversion Time,${new Date().toLocaleTimeString()}
+Status,Converted
+
+Sample Data Table,
+Column 1,Column 2,Column 3,Column 4
+Data Row 1,Value A,Value B,Value C
+Data Row 2,100,200,300
+Data Row 3,Text Sample,Another Value,Final Column
+
+Notes:
+"This CSV file was generated from PDF: ${file.name}"
+"In production, this would extract tables and data from the PDF"
+"For accurate PDF table extraction, OCR services would be integrated"`;
+
   return {
-    blob: new Blob([csvContent], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' }),
-    filename: `${file.name.replace('.pdf', '')}.xlsx`
+    blob: new Blob([csvContent], { type: 'text/csv' }),
+    filename: `${file.name.replace('.pdf', '')}.csv`
   };
 };
 
